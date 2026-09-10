@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>편집 가능한 문서</title>
+<style>
+/* ===== 문서 디자인 (자유롭게 교체·확장) ===== */
+:root{ color-scheme:light; }
+body{ margin:0; font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif; color:#1f2937; background:#fff; line-height:1.7; font-size:16px; -webkit-font-smoothing:antialiased; }
+#doc-content{ max-width:820px; margin:0 auto; padding:56px 24px 140px; }
+#doc-content h1{ font-size:30px; font-weight:800; letter-spacing:-.3px; margin:0 0 14px; }
+#doc-content h2{ font-size:21px; font-weight:800; margin:32px 0 10px; }
+#doc-content h3{ font-size:17px; font-weight:700; margin:22px 0 8px; }
+#doc-content p{ margin:12px 0; }
+#doc-content blockquote{ margin:14px 0; padding:8px 16px; border-left:3px solid #cbd5e1; color:#475569; }
+#doc-content ul,#doc-content ol{ margin:10px 0; padding-left:22px; }
+</style>
+
+<!-- ===== doc-editor 엔진 스타일 (인라인 · 수정 금지) ===== -->
+<style id="doc-editor-style">
+/*__DOC_EDITOR_CSS__*/
+</style>
+</head>
+<body>
+
+<!-- ========================================================
+     doc-editor 크롬 마크업 (엔진이 참조하는 고정 id · 수정 금지)
+     ======================================================== -->
+<div id="doc-controls">
+  <button class="doc-ed-btn" id="doc-editToggle" title="편집 모드 (Cmd/Ctrl+E)">✎ 편집</button>
+  <button class="doc-ed-btn primary" id="doc-saveBtn" title="최초 저장 시 대상 파일 선택 (Cmd/Ctrl+S)">저장</button>
+  <button class="doc-ed-btn" id="doc-inspectorToggle" aria-expanded="false" aria-controls="doc-inspector">현재 서식</button>
+  <button class="doc-ed-btn" id="doc-moreToggle" aria-expanded="false" aria-controls="doc-more-actions">더보기 ▾</button>
+  <div id="doc-more-actions">
+  <button class="doc-ed-btn ghost" id="doc-saveAsBtn" title="새 파일로 저장">다른 이름으로</button>
+  <button class="doc-ed-btn ghost" id="doc-exportBtn" title="편집기와 히스토리를 뺀 별도 HTML 내려받기">배포용 HTML 저장</button>
+  <button class="doc-ed-btn ghost" id="doc-attachBtn" title="다른 HTML 파일을 선택해 편집 가능한 사본으로 다운로드">HTML에 편집기 추가</button>
+  <input id="doc-attachFile" type="file" accept=".html,.htm,text/html" hidden>
+  <button class="doc-ed-btn ghost" id="doc-historyBtn" title="이전 저장본 보기·복원">히스토리</button>
+  <button class="doc-ed-btn ghost" id="doc-printBtn" title="인쇄">인쇄</button>
+  </div>
+</div>
+
+<div id="doc-editbar" role="toolbar" aria-label="서식 도구 (좁은 화면에서는 좌우로 넘겨 사용)">
+  <div class="doc-ed-g">
+    <select class="doc-ed-esel" id="doc-ebBlock" title="단락 스타일">
+      <option value="p">본문</option><option value="h1">제목 1</option><option value="h2">제목 2</option><option value="h3">제목 3</option><option value="blockquote">인용</option>
+    </select>
+    <select class="doc-ed-esel" id="doc-ebFont" title="글씨체">
+      <option value="">글씨체</option>
+      <option value="-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif">기본(고딕)</option>
+      <option value="Georgia,'Noto Serif KR',serif">세리프</option>
+      <option value="ui-monospace,'JetBrains Mono',Menlo,monospace">고정폭</option>
+    </select>
+    <select class="doc-ed-esel" id="doc-ebSize" title="글씨 크기">
+      <option value="">크기</option>
+      <option>12</option><option>13</option><option>14</option><option>15</option><option>16</option>
+      <option>18</option><option>20</option><option>24</option><option>28</option><option>32</option><option>40</option>
+    </select>
+  </div>
+  <div class="doc-ed-g">
+    <button class="doc-ed-eb b" data-cmd="bold" title="굵게">B</button>
+    <button class="doc-ed-eb i" data-cmd="italic" title="기울임">I</button>
+    <button class="doc-ed-eb u" data-cmd="underline" title="밑줄">U</button>
+    <button class="doc-ed-eb s" data-cmd="strikeThrough" title="취소선">S</button>
+  </div>
+  <div class="doc-ed-g">
+    <span class="doc-ed-ecol"><label>글자</label><input type="color" id="doc-ebColor" value="#1f2937"></span>
+    <span class="doc-ed-ecol"><label>배경</label><input type="color" id="doc-ebBg" value="#fff3a3"><button class="mini" id="doc-ebBgClear" title="배경 지움">지움</button></span>
+  </div>
+  <div class="doc-ed-g">
+    <button class="doc-ed-eb" data-cmd="justifyLeft" title="왼쪽 정렬">⇤</button>
+    <button class="doc-ed-eb" data-cmd="justifyCenter" title="가운데 정렬">≡</button>
+    <button class="doc-ed-eb" data-cmd="justifyRight" title="오른쪽 정렬">⇥</button>
+  </div>
+  <div class="doc-ed-g">
+    <button class="doc-ed-eb" data-cmd="insertUnorderedList" title="불릿 목록">• 목록</button>
+    <button class="doc-ed-eb" data-cmd="insertOrderedList" title="번호 목록">1. 목록</button>
+    <button class="doc-ed-eb" data-cmd="outdent" title="내어쓰기">◂</button>
+    <button class="doc-ed-eb" data-cmd="indent" title="들여쓰기">▸</button>
+  </div>
+  <div class="doc-ed-g">
+    <button class="doc-ed-eb" id="doc-ebTable" title="표 삽입">표</button>
+    <button class="doc-ed-eb" data-cmd="removeFormat" title="서식 지우기">서식↺</button>
+  </div>
+</div>
+
+<aside id="doc-inspector">
+  <div class="doc-ed-insp-card">
+    <div class="doc-ed-insp-h"><span class="d"></span>현재 서식<button class="doc-ed-btn" id="doc-inspectorClose" aria-label="현재 서식 닫기">닫기</button></div>
+    <div class="doc-ed-insp-b">
+      <div class="doc-ed-irow"><span class="doc-ed-ik">단락 스타일</span><span class="doc-ed-iv" id="doc-i-block">본문</span></div>
+      <div class="doc-ed-irow"><span class="doc-ed-ik">글씨 크기</span><span class="doc-ed-iv" id="doc-i-size">-</span></div>
+      <div class="doc-ed-irow"><span class="doc-ed-ik">글씨체</span><span class="doc-ed-iv" id="doc-i-font">-</span></div>
+      <div class="doc-ed-irow"><span class="doc-ed-ik">글자색</span><span class="doc-ed-iv"><span class="doc-ed-sw"><i id="doc-i-fore-sw"></i><span id="doc-i-fore-tx">-</span></span></span></div>
+      <div class="doc-ed-irow"><span class="doc-ed-ik">배경색</span><span class="doc-ed-iv"><span class="doc-ed-sw"><i id="doc-i-back-sw"></i><span id="doc-i-back-tx">-</span></span></span></div>
+      <div class="doc-ed-irow"><span class="doc-ed-ik">적용된 서식</span><span class="doc-ed-iv"><span class="doc-ed-ichips" id="doc-i-chips">
+        <span class="doc-ed-ichip" data-st="bold">굵게</span><span class="doc-ed-ichip" data-st="italic">기울임</span>
+        <span class="doc-ed-ichip" data-st="underline">밑줄</span><span class="doc-ed-ichip" data-st="strikeThrough">취소선</span>
+      </span></span></div>
+    </div>
+    <div class="doc-ed-insp-hint">내용을 클릭하면 그 위치의 서식이 표시됩니다. 위 툴바로 바꿀 수 있어요.</div>
+  </div>
+</aside>
+
+<div id="doc-editflag">● 편집 모드. 내용을 클릭해 수정하세요</div>
+
+<div id="doc-restore-banner" role="region" aria-label="자동저장 복구">
+  <div class="msg"><b>자동저장본</b>이 있습니다. 복구하시겠어요?</div>
+  <button class="doc-ed-btn primary" id="doc-rb-restore">복구</button>
+  <button class="doc-ed-btn" id="doc-rb-ignore" title="이번에만 알림 닫기. 다음에 열면 다시 안내합니다.">무시</button>
+  <button class="doc-ed-btn" id="doc-rb-keep-current" title="이전 자동저장본을 현재 본문으로 교체합니다. 파일 저장과는 별개입니다.">무시하고 현재 버전으로 백업 확정</button>
+</div>
+
+<div class="doc-ed-modal" id="doc-history-modal">
+  <div class="doc-ed-modal-card">
+    <div class="doc-ed-modal-head"><h3>저장 히스토리</h3><button class="doc-ed-btn" id="doc-hist-close">닫기</button></div>
+    <div class="doc-ed-modal-body"><div id="doc-hist-list"></div><div id="doc-hist-preview"></div></div>
+  </div>
+</div>
+
+<div id="doc-toast" role="status" aria-live="polite"></div>
+
+<!-- ========================================================
+     여기부터 문서 본문. #doc-content 안을 자유롭게 작성한다.
+     (이 영역만 편집 대상. 디자인·구조 제약 없음)
+     ======================================================== -->
+<main id="doc-content" contenteditable="false">
+
+  <h1>문서 제목</h1>
+  <p>여기에 내용을 작성하세요. 오른쪽 위 <strong>✎ 편집</strong> 버튼(또는 Cmd/Ctrl+E)을 누르면 글자·서식을 직접 고칠 수 있고, <strong>저장</strong>으로 같은 파일에 덮어쓸 수 있습니다.</p>
+
+</main>
+
+<script type="application/json" id="doc-history">[]</script>
+
+<!-- ===== doc-editor 엔진 (인라인 · 수정 금지) ===== -->
+<script id="doc-editor-script">
+/*__DOC_EDITOR_JS__*/
+</script>
+</body>
+</html>

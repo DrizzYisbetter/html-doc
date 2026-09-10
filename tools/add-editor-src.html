@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HTML에 편집기 추가</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f4f5f1;color:#202b28;font:16px/1.7 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}main{max-width:760px;margin:9vh auto;padding:40px 28px}.eyebrow{font-size:12px;letter-spacing:.14em;font-weight:750;color:#357461}h1{font-size:clamp(30px,5vw,44px);line-height:1.25;letter-spacing:-.04em;margin:14px 0 20px}p{margin:0 0 20px;color:#56665f}.card{background:#fff;border:1px solid #dbe2dd;border-radius:20px;padding:28px;margin:30px 0 24px;box-shadow:0 10px 40px #21392b06}.steps{font-size:14px;color:#526a5d;margin-bottom:20px}button,.download{display:inline-flex;align-items:center;justify-content:center;min-height:48px;max-width:100%;padding:12px 22px;border:0;border-radius:10px;background:#245e48;color:white;font:inherit;font-weight:650;text-decoration:none;cursor:pointer}button:disabled{opacity:.5;cursor:wait}button:focus-visible,a:focus-visible{outline:3px solid #75b59b;outline-offset:4px}.download{background:#e8f1ec;color:#245e48;margin-top:14px}.download[hidden]{display:none}#status{margin:18px 0 0;overflow-wrap:anywhere;white-space:pre-line;color:#244d3b}#status[data-error]{color:#a23030}.note{font-size:14px;line-height:1.8}.note strong{color:#314c3e}footer{font-size:12px;color:#718079;border-top:1px solid #dbe2dd;padding-top:20px}@media(max-width:600px){main{margin:24px auto;padding:24px 20px}.card{padding:22px}button,.download{width:100%}}
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">HTML DOC · LOCAL TOOL</div>
+  <h1>HTML에 편집기 추가</h1>
+  <p>기존 HTML에 글자·서식 편집, 저장, 히스토리, 자동 백업을 더합니다.<br>다운로드한 사본을 열면 바로 편집할 수 있습니다.</p>
+  <section class="card" aria-label="HTML 변환">
+    <div class="steps">1. HTML 파일 선택 &nbsp; → &nbsp; 2. 편집 가능한 사본 다운로드</div>
+    <button id="choose" type="button">HTML 파일 선택</button>
+    <input id="file" type="file" accept=".html,.htm,text/html" hidden>
+    <p id="status" role="status" aria-live="polite">파일은 이 브라우저에서 처리됩니다. 원본 파일은 그대로 유지됩니다.</p>
+    <a id="download" class="download" hidden>편집 가능한 HTML 다운로드</a>
+  </section>
+  <p class="note"><strong>본문·디자인·문서 자체 기능을 함께 보관합니다.</strong><br>이미 편집기가 있는 파일은 중복 변환하지 않습니다. 상대 경로 이미지·CSS를 쓰는 문서는 내려받은 파일을 원본과 같은 폴더에 두세요. 본문 구조에 의존하는 CSS·스크립트는 변환 후 화면과 동작을 확인해 주세요.</p>
+  <footer>이 페이지 자체도 HTML 파일 하나입니다. 서버나 확장 프로그램 없이 사용할 수 있습니다.</footer>
+</main>
+<script type="application/json" id="editor-bundle">/*__DOC_EDITOR_BUNDLE__*/</script>
+<script>
+/*__DOC_ATTACH_JS__*/
+</script>
+<script>
+(function(){
+  'use strict';
+  var bundle=JSON.parse(document.getElementById('editor-bundle').textContent);
+  var choose=document.getElementById('choose'),input=document.getElementById('file'),status=document.getElementById('status'),download=document.getElementById('download');
+  var url=null;
+  choose.addEventListener('click',function(){input.click();});
+  input.addEventListener('change',async function(){
+    var file=input.files && input.files[0];input.value='';if(!file)return;
+    choose.disabled=true;download.hidden=true;download.removeAttribute('href');status.removeAttribute('data-error');status.textContent='편집기를 추가하고 있습니다…';
+    if(url){URL.revokeObjectURL(url);url=null;}
+    try{
+      var html=window.DocEditorAttach.convert(await window.DocEditorAttach.readFile(file),bundle);
+      var name=window.DocEditorAttach.filename(file.name);
+      url=URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'}));
+      download.href=url;download.download=name;download.hidden=false;
+      status.textContent='완료: '+name+'\n아래 버튼을 눌러 내려받은 뒤 파일을 열어 주세요.';
+    }catch(e){status.setAttribute('data-error','');status.textContent=e.message||'변환하지 못했습니다.';}
+    finally{choose.disabled=false;}
+  });
+  window.addEventListener('pagehide',function(){if(url)URL.revokeObjectURL(url);});
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>느린 도시를 걷는 법 | FIELDWORK JOURNAL</title>
+<style>
+/* 문서 디자인: FIELDWORK JOURNAL. 편집 엔진과 독립적인 문서 스타일. */
+:root{
+  color-scheme:light;
+  --walk-paper:#f5f1e8; --walk-ink:#20382e; --walk-muted:#657167; --walk-line:#d4d8ca;
+  --walk-orange:#c95632; --walk-soft:#e6eadc;
+  --doc-ed-accent:#166b52; --doc-ed-accent-deep:#10553f; --doc-ed-accent-soft:#e2f0e8; --doc-ed-accent-line:#a7cdb6;
+}
+body{ margin:0; background:#e7e9df; color:var(--walk-ink); font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif; -webkit-font-smoothing:antialiased; }
+#doc-content{ box-sizing:border-box; max-width:1100px; margin:64px auto 40px; padding:0 64px; background:var(--walk-paper); box-shadow:0 12px 56px #20382e0c; font-size:16px; line-height:1.8; word-break:keep-all; overflow-wrap:break-word; }
+#doc-content *{ box-sizing:border-box; }
+#doc-content p{ margin:0; }
+#doc-content .walk-masthead{ padding:30px 0 20px; display:flex; justify-content:space-between; gap:20px; align-items:center; border-bottom:2px solid var(--walk-ink); }
+#doc-content .walk-brand{ font-size:15px; letter-spacing:4px; font-weight:850; }
+#doc-content .walk-edition{ font-size:11px; letter-spacing:1.5px; text-align:right; line-height:1.6; color:var(--walk-muted); }
+#doc-content .walk-hero{ display:grid; grid-template-columns:1.25fr 1fr; gap:32px; padding:52px 0 40px; align-items:center; }
+#doc-content .walk-kicker{ font-size:11px; font-weight:750; letter-spacing:2px; color:var(--walk-orange); }
+#doc-content h1{ font-size:clamp(46px,5.7vw,72px); line-height:1.12; letter-spacing:-4px; font-weight:850; margin:22px 0 24px; }
+#doc-content h1 em{ color:var(--walk-orange); font-style:normal; }
+#doc-content .walk-lede{ max-width:390px; color:var(--walk-muted); font-size:16px; line-height:1.9; }
+#doc-content .walk-issue{ display:inline-flex; margin-top:32px; align-items:center; gap:14px; font-family:Georgia,serif; font-size:15px; font-style:italic; }
+#doc-content .walk-issue::before{ content:''; display:block; width:32px; height:1px; background:var(--walk-orange); }
+#doc-content .walk-art{ margin:0; position:relative; }
+#doc-content .walk-art svg{ display:block; width:100%; height:auto; }
+#doc-content .walk-art figcaption{ display:flex; justify-content:space-between; font-size:9px; letter-spacing:1.8px; margin-top:12px; color:var(--walk-muted); }
+#doc-content .walk-facts{ display:grid; grid-template-columns:repeat(3,1fr); border-top:1px solid var(--walk-ink); border-bottom:1px solid var(--walk-ink); padding:22px 0; }
+#doc-content .walk-fact{ padding:0 28px; border-left:1px solid var(--walk-line); }
+#doc-content .walk-fact:first-child{ padding-left:0; border-left:0; }
+#doc-content .walk-fact span{ display:block; font-size:10px; letter-spacing:1.6px; color:var(--walk-muted); }
+#doc-content .walk-fact strong{ font-family:Georgia,serif; font-size:32px; line-height:1.35; font-weight:400; }
+#doc-content .walk-fact small{ font-size:12px; padding-left:8px; }
+#doc-content .walk-section{ padding:42px 0; border-bottom:1px solid var(--walk-line); }
+#doc-content .walk-section-head{ display:flex; align-items:baseline; justify-content:space-between; gap:16px; margin-bottom:24px; }
+#doc-content h2{ margin:0; font-size:25px; line-height:1.4; letter-spacing:-1px; }
+#doc-content .walk-label{ font-size:10px; letter-spacing:1.8px; color:var(--walk-muted); }
+#doc-content .walk-intro{ display:grid; grid-template-columns:1fr 1fr; gap:36px; color:var(--walk-muted); font-size:14px; }
+#doc-content .walk-stops{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:28px; }
+#doc-content .walk-stop{ border-top:3px solid var(--walk-ink); padding-top:16px; }
+#doc-content .walk-stop:nth-child(2){ border-color:var(--walk-orange); }
+#doc-content .walk-number{ font-family:Georgia,serif; font-size:42px; line-height:1; color:#80907e; }
+#doc-content .walk-stop h3{ margin:22px 0 10px; font-size:20px; letter-spacing:-.6px; }
+#doc-content .walk-stop p{ color:var(--walk-muted); font-size:13px; line-height:1.85; }
+#doc-content .walk-stop .walk-tag{ margin-top:20px; font-size:10px; letter-spacing:1px; color:var(--walk-orange); }
+#doc-content .walk-quote{ position:relative; background:var(--walk-ink); color:var(--walk-paper); margin:0 -64px; padding:40px 64px; display:grid; grid-template-columns:90px 1fr; gap:20px; }
+#doc-content .walk-quote-mark{ font-family:Georgia,serif; color:#c9d5b7; font-size:100px; line-height:1; }
+#doc-content .walk-quote blockquote{ margin:0; font-size:25px; line-height:1.65; font-weight:550; letter-spacing:-.7px; }
+#doc-content .walk-quote cite{ display:block; font-size:10px; letter-spacing:2px; font-style:normal; color:#c9d5b7; margin-top:16px; }
+#doc-content .walk-schedule{ width:100%; border-collapse:collapse; text-align:left; font-size:13px; }
+#doc-content .walk-schedule th{ font-size:10px; font-weight:600; letter-spacing:1.2px; color:var(--walk-muted); padding:0 12px 12px; border-bottom:1px solid var(--walk-ink); }
+#doc-content .walk-schedule td{ padding:15px 12px; border-bottom:1px solid var(--walk-line); }
+#doc-content .walk-schedule td:first-child{ font-family:Georgia,serif; font-size:18px; width:100px; white-space:nowrap; }
+#doc-content .walk-schedule th:first-child,#doc-content .walk-schedule td:first-child{ padding-left:0; }
+#doc-content .walk-schedule tr:last-child td{ border-bottom:0; }
+#doc-content .walk-notes{ display:grid; grid-template-columns:1fr 1fr; gap:36px; padding:34px 0; }
+#doc-content .walk-note h3{ font-size:13px; margin:0 0 12px; }
+#doc-content .walk-note p{ font-size:12px; color:var(--walk-muted); }
+#doc-content .walk-note ul{ margin:0; padding-left:17px; font-size:12px; color:var(--walk-muted); }
+#doc-content .walk-footer{ border-top:2px solid var(--walk-ink); padding:20px 0 28px; display:flex; align-items:center; justify-content:space-between; gap:20px; font-size:10px; color:var(--walk-muted); }
+#doc-content .walk-footer b{ font-size:12px; color:var(--walk-ink); letter-spacing:2px; }
+@media(max-width:760px){
+  #doc-content{ margin:64px 14px 20px; padding:0 26px; }
+  #doc-content .walk-hero{ gap:18px; padding-top:36px; }
+  #doc-content h1{ font-size:46px; letter-spacing:-2.8px; }
+  #doc-content .walk-lede{ font-size:14px; }
+  #doc-content .walk-quote{ margin:0 -26px; padding:30px 26px; grid-template-columns:45px 1fr; gap:10px; }
+  #doc-content .walk-quote blockquote{ font-size:21px; }
+  #doc-content .walk-quote-mark{ font-size:65px; }
+  #doc-content .walk-stops{ gap:18px; }
+}
+@media(max-width:540px){
+  #doc-content .walk-brand{ font-size:11px; letter-spacing:2px; }
+  #doc-content .walk-edition{ font-size:8px; }
+  #doc-content .walk-hero{ grid-template-columns:1fr; }
+  #doc-content h1{ font-size:54px; }
+  #doc-content .walk-art{ max-width:340px; margin:16px auto 0; width:100%; }
+  #doc-content .walk-fact{ padding:0 12px; }
+  #doc-content .walk-fact strong{ font-size:25px; }
+  #doc-content .walk-fact small{ display:block; padding-left:0; font-size:10px; }
+  #doc-content .walk-fact span{ font-size:8px; letter-spacing:.8px; }
+  #doc-content .walk-intro,#doc-content .walk-notes{ grid-template-columns:1fr; gap:18px; }
+  #doc-content .walk-stops{ grid-template-columns:1fr; gap:26px; }
+  #doc-content .walk-stop{ display:grid; grid-template-columns:45px 1fr; column-gap:14px; }
+  #doc-content .walk-stop h3{ margin:0 0 8px; }
+  #doc-content .walk-stop p{ grid-column:2; }
+  #doc-content .walk-stop .walk-tag{ margin-top:12px; }
+  #doc-content .walk-label{ font-size:8px; }
+  #doc-content .walk-section{ padding:32px 0; }
+  #doc-content h2{ font-size:22px; }
+  #doc-content .walk-schedule th,#doc-content .walk-schedule td{ padding-left:8px; padding-right:8px; }
+  #doc-content .walk-schedule td:first-child{ width:58px; font-size:15px; }
+  #doc-content .walk-schedule{ font-size:11px; }
+  #doc-content .walk-footer{ align-items:flex-start; }
+}
+@media print{
+  body{ background:white; }
+  #doc-content{ margin:0; max-width:none; box-shadow:none; padding:0 28px; }
+  #doc-content .walk-quote{ margin:0 -28px; padding:30px 28px; }
+  #doc-content .walk-hero,#doc-content .walk-stop,#doc-content .walk-quote{ break-inside:avoid; }
+  #doc-content{ print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+}
+</style>
+
+<!-- ===== doc-editor 엔진 스타일 (인라인 · 수정 금지) ===== -->
+<style id="doc-editor-style">
+/*__DOC_EDITOR_CSS__*/
+</style>
+</head>
+<body>
+
+<!-- ========================================================
+     doc-editor 크롬 마크업 (엔진이 참조하는 고정 id · 수정 금지)
+     ======================================================== -->
+<!--__DOC_EDITOR_CHROME__-->
+
+<!-- ======== 문서 본문: 이 안만 편집 대상 (디자인은 위 <style>가 자유롭게 담당) ======== -->
+<main id="doc-content" contenteditable="false">
+  <div class="walk-masthead">
+    <p class="walk-brand">FIELDWORK JOURNAL</p>
+    <p class="walk-edition">작은 발견을 위한 생활 기록<br>VOL. 01 / THE SLOW WEEKEND</p>
+  </div>
+
+  <header class="walk-hero">
+    <div>
+      <p class="walk-kicker">도시 산책 특집 · WEEKEND LETTER</p>
+      <h1>느린 도시를<br><em>걷는 법.</em></h1>
+      <p class="walk-lede">멀리 떠나지 않아도 괜찮습니다.<br>익숙한 골목에서 처음 보는 장면을 찾는 일.<br>이번 주말에는 발걸음의 속도를 바꿔보세요.</p>
+      <p class="walk-issue">A small journey, close to home.</p>
+    </div>
+    <figure class="walk-art">
+      <svg viewBox="0 0 400 410" role="img" aria-label="해가 떠 있는 도시의 건물과 나무 사이를 잇는 구불구불한 산책길 일러스트">
+        <defs>
+          <pattern id="walk-art-grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#20382e" stroke-opacity=".065"/></pattern>
+          <clipPath id="walk-art-clip"><rect width="400" height="410" rx="190"/></clipPath>
+        </defs>
+        <g clip-path="url(#walk-art-clip)">
+          <rect width="400" height="410" fill="#e2e7d8"/>
+          <rect width="400" height="410" fill="url(#walk-art-grid)"/>
+          <circle cx="288" cy="98" r="43" fill="#cd603e"/>
+          <path d="M-20 270 Q105 190 217 246 T430 212 V430H-20Z" fill="#a5b491"/>
+          <path d="M-20 340 Q140 265 240 311 T430 283 V430H-20Z" fill="#647f65"/>
+          <rect x="62" y="164" width="62" height="133" fill="#f6f1e6"/>
+          <path d="M62 164L93 128L124 164Z" fill="#20382e"/>
+          <path d="M77 184H88V202H77ZM100 184H111V202H100ZM77 218H88V236H77ZM100 218H111V236H100Z" fill="#a5b491"/>
+          <path d="M85 297V268a9 9 0 0118 0v29Z" fill="#20382e"/>
+          <rect x="257" y="218" width="78" height="91" fill="#d29e72"/>
+          <path d="M248 218L295 184L344 218Z" fill="#f6f1e6"/>
+          <path d="M272 237H286V255H272ZM306 237H320V255H306Z" fill="#20382e"/>
+          <rect x="289" y="277" width="16" height="32" fill="#20382e"/>
+          <path d="M162 418C130 373 140 345 198 331S267 303 227 279S159 264 182 226" fill="none" stroke="#f6f1e6" stroke-width="24"/>
+          <path d="M162 418C130 373 140 345 198 331S267 303 227 279S159 264 182 226" fill="none" stroke="#cd603e" stroke-width="2" stroke-dasharray="4 7"/>
+          <path d="M337 367V285M32 337V243M211 198V151" stroke="#20382e" stroke-width="5"/>
+          <ellipse cx="337" cy="291" rx="25" ry="40" fill="#20382e"/>
+          <ellipse cx="32" cy="250" rx="26" ry="40" fill="#20382e"/>
+          <ellipse cx="211" cy="154" rx="20" ry="32" fill="#809675"/>
+          <circle cx="185" cy="228" r="6" fill="#cd603e" stroke="#f6f1e6" stroke-width="3"/>
+          <circle cx="166" cy="365" r="6" fill="#cd603e" stroke="#f6f1e6" stroke-width="3"/>
+          <path d="M146 103q8-9 16 0q8-9 16 0" stroke="#20382e" stroke-width="2" fill="none"/>
+        </g>
+      </svg>
+      <figcaption><span>TAKE THE SCENIC ROUTE</span><span>ILLUSTRATION / 01</span></figcaption>
+    </figure>
+  </header>
+
+  <div class="walk-facts">
+    <div class="walk-fact"><span>WALKING DISTANCE</span><strong>3.2</strong><small>km, 천천히 걸어서</small></div>
+    <div class="walk-fact"><span>TIME TO WANDER</span><strong>3</strong><small>hours, 쉼표를 포함해</small></div>
+    <div class="walk-fact"><span>THINGS TO FIND</span><strong>∞</strong><small>발견에는 끝이 없으니</small></div>
+  </div>
+
+  <section class="walk-section">
+    <div class="walk-section-head"><h2>오늘의 목적지는, 여유.</h2><span class="walk-label">EDITOR’S LETTER</span></div>
+    <div class="walk-intro">
+      <p>주말이 되면 우리는 종종 더 많은 곳에 가야 한다고 생각합니다. 새로운 전시, 멀리 있는 식당, 저장해 둔 수십 개의 장소. 하지만 좋은 하루가 꼭 빽빽한 일정에서 시작되는 건 아닙니다.</p>
+      <p>이번 산책에는 세 곳의 쉼표만 준비했습니다. 책 한 권을 고르는 시간, 따뜻한 잔을 두 손으로 감싸는 시간, 나무 그림자가 움직이는 모습을 바라보는 시간. 나머지는 비워두기로 해요.</p>
+    </div>
+  </section>
+
+  <section class="walk-section">
+    <div class="walk-section-head"><h2>세 번의 작은 멈춤</h2><span class="walk-label">THE LITTLE STOPS</span></div>
+    <div class="walk-stops">
+      <article class="walk-stop"><span class="walk-number">01</span><h3>골목 끝 작은 서점</h3><p>평소라면 지나쳤을 책등에 눈을 맞춰보세요. 오늘의 책은 검색 결과 대신, 우연히 펼친 첫 문장으로 고릅니다.</p><p class="walk-tag">READ / 마음에 남는 문장 하나</p></article>
+      <article class="walk-stop"><span class="walk-number">02</span><h3>창가에 남은 햇빛</h3><p>창밖으로 사람이 지나가는 자리에 앉습니다. 커피가 식는 동안 휴대전화 대신 가져온 책의 첫 장을 넘겨보세요.</p><p class="walk-tag">REST / 아무것도 서두르지 않기</p></article>
+      <article class="walk-stop"><span class="walk-number">03</span><h3>나무 아래 긴 의자</h3><p>산책의 마지막은 그늘에 앉아 보냅니다. 오늘 본 색깔 세 가지를 기억하고, 다음에 다시 걷고 싶은 길을 적어둡니다.</p><p class="walk-tag">NOTICE / 오늘만의 장면 수집</p></article>
+    </div>
+  </section>
+
+  <div class="walk-quote">
+    <span class="walk-quote-mark" aria-hidden="true">“</span>
+    <blockquote>좋은 산책은 더 멀리 가는 일이 아니라,<br>지나치던 것을 발견하는 일.<cite>FIELD NOTE NO. 01</cite></blockquote>
+  </div>
+
+  <section class="walk-section">
+    <div class="walk-section-head"><h2>느슨하게 짠 오후</h2><span class="walk-label">A GENTLE ITINERARY</span></div>
+    <table class="walk-schedule">
+      <thead><tr><th scope="col">TIME</th><th scope="col">오늘의 계획</th><th scope="col">작은 제안</th></tr></thead>
+      <tbody>
+        <tr><td>13:00</td><td>가벼운 가방으로 출발하기</td><td>이어폰을 잠시 빼고 걸어보기</td></tr>
+        <tr><td>13:30</td><td>서점에서 책 한 권 만나기</td><td>익숙하지 않은 서가도 들여다보기</td></tr>
+        <tr><td>14:20</td><td>창가에서 오래 쉬어가기</td><td>마음에 든 문장을 노트에 옮기기</td></tr>
+        <tr><td>15:20</td><td>공원을 지나 집으로 돌아오기</td><td>올 때와 다른 골목을 선택하기</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <div class="walk-notes">
+    <section class="walk-note"><h3>가방에는 이 정도만</h3><ul><li>작은 노트와 잘 써지는 펜</li><li>물 한 병, 그리고 편한 신발</li><li>계획을 바꿔도 괜찮다는 마음</li></ul></section>
+    <section class="walk-note"><h3>이제, 당신의 산책으로</h3><p>이 글은 직접 고쳐 쓸 수 있는 예시 문서입니다. 오른쪽 위 <strong>편집</strong>을 눌러 좋아하는 동네와 시간을 적어보세요. 문장을 다듬고, 글자색을 바꾸고, 완성한 하루를 <strong>저장</strong>할 수 있습니다.</p></section>
+  </div>
+  <footer class="walk-footer"><b>FIELDWORK.</b><p>가상의 산책을 담은 편집 가능한 매거진 예시<br>작은 발견이 쌓이면, 일상이 여행이 됩니다.</p><span>01 / END</span></footer>
+</main>
+
+<script type="application/json" id="doc-history">[]</script>
+
+<!-- ===== doc-editor 엔진 (인라인 · 수정 금지) ===== -->
+<script id="doc-editor-script">
+/*__DOC_EDITOR_JS__*/
+</script>
+</body>
+</html>

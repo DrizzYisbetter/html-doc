@@ -1,0 +1,137 @@
+> 한국어 상세 가이드. 코드 경로는 스킬 루트 기준입니다. 문체와 문장 부호는 사용자의 요청을 따릅니다.
+
+# html-doc: 어떤 HTML 문서든 "편집 가능하게"
+
+**문서 디자인은 자유, 편집 기능만 얹는다.** 아래 계약만 지키면 문서에 인라인된 엔진이 자동 제공한다:
+보기 모드(기본·완전 정적) ↔ 편집 모드(⌘/Ctrl+E) 토글, 서식 툴바(단락·글씨체·크기·B/I/U/S·글자색·배경색·정렬·목록·표),
+"현재 서식" 속성 패널, 같은 파일 저장(⌘/Ctrl+S)+히스토리+자동저장. 문서 디자인은 자유롭게 구성하되 아래 편집 루트 계약을 따른다.
+
+## 편집 계약 (이 4가지만 지키면 나머지는 전부 자유)
+
+1. **편집 대상**: 문서 본문을 `<main id="doc-content"> … </main>` 안에 넣는다. 본문 편집은 이 영역으로 제한한다. 엔진은 별도 크롬 UI와 body의 편집 상태·상단 여백도 관리한다.
+2. **크롬 마크업**: `#doc-controls`(컨트롤 클러스터)·`#doc-editbar`(툴바)·`#doc-inspector`(속성 패널)·`#doc-editflag`·`#doc-restore-banner`·`#doc-history-modal`·`#doc-toast` 블록을 그대로 둔다.
+3. **히스토리 저장소**: `<script type="application/json" id="doc-history">[]</script>`.
+4. **엔진 인라인**: 엔진 style은 `id="doc-editor-style"`, script는 `id="doc-editor-script"`를 유지한다(배포용 내보내기에서 식별). `assets/doc-editor.css`를 `<style>`에, `assets/doc-attach.js` + `assets/doc-editor.js`를 이 순서대로 하나의 `<script>`에 인라인한다. 빌드된 `skeleton.html`에 모두 포함된다. **엔진 코드는 절대 수정·요약하지 않는다**(그대로 복사).
+
+크롬의 공개 id와 주요 클래스·CSS 변수는 `doc-*` / `--doc-ed-*`로 네임스페이스되어 문서와의 충돌을 줄인다. 일반 상태 클래스(`show`, `on` 등)와 상위 스타일의 영향은 육안으로 검증한다.
+
+## 생성 워크플로
+
+골격에는 `<style>`이 **두 개**다: 첫 번째 = 문서 디자인(자유 편집), 두 번째 = 엔진 스타일(수정 금지). 엔진 `<script>`도 별도로 있다.
+
+**새 문서**
+1. `assets/skeleton.html`을 산출 경로에 **복사**한다 (엔진·크롬 인라인 포함).
+2. **첫 번째 `<style>`**(문서 디자인)과 `<main id="doc-content">` 안만 작성한다. 색·폰트·레이아웃 자유.
+3. 크롬 마크업·`#doc-history`·**두 번째 `<style>`(엔진)**·엔진 `<script>`는 건드리지 않는다.
+
+**기존/타 스킬이 만든 HTML에 얹기**
+1. `tools/add-editor.html`을 열고 **HTML 파일 선택 → 편집 가능한 HTML 다운로드**를 사용한다. 기존 편집 문서의 **HTML에 편집기 추가** 버튼으로도 가능하다(모바일은 더보기 안).
+2. 결과는 `원래파일명-편집가능.html` 사본이다. 원본 파일은 덮어쓰지 않는다. `#doc-content`가 있으면 재사용하고, 없으면 본문을 `display:contents`인 컨테이너로 감싼다. 문서 스타일·본문 요소·ID·문서 자체 스크립트는 유지한다.
+3. 상대 경로 리소스는 결과를 원본과 같은 폴더에 두어 확인한다. 본문 직계 선택자(`body > ...`)·부모 요소를 참조하는 스크립트 등 구조 의존 코드는 자동 래핑에 영향을 받을 수 있다. 자동 변환 후 실제 화면을 확인하고, 그런 문서는 수동으로 편집 루트를 정해 원래 구조에 맞춰 통합한다.
+4. 수동 통합 시 본문 루트에 `id="doc-content"`를 두고, `skeleton.html`에서 크롬 7블록 + `#doc-history` + `#doc-editor-style` + `#doc-editor-script`를 그대로 복사한다.
+
+**스킬 자체를 유지보수한다면** 엔진은 `assets/doc-editor.css`·`assets/doc-editor.js`, 변환기는 `assets/doc-attach.js`, 크롬은 `assets/skeleton-src.html`에서 수정한다. `python3 assets/build-template.py`로 `assets/skeleton.html`·`examples/demo.html`·`tools/add-editor.html`을 재조립하고 `python3 assets/build-template.py --check`로 최신 상태를 확인한다. 예시와 변환 도구는 같은 엔진·크롬을 빌드 때 가져온다. `*-src.html`은 빌드 입력이며, 브라우저에서는 빌드된 HTML을 연다.
+
+기존에 배포한 HTML은 엔진이 인라인되어 있어 자동 갱신되지 않는다. 업데이트 시 본문·문서 스타일·`data-doc-id`·`#doc-history`를 보존하고 엔진 CSS/JS 및 크롬을 함께 교체한다.
+
+## 저장 파일 연결 (HTML 단독)
+
+- 지원 브라우저에서 **처음 저장할 때 한 번** 덮어쓸 파일을 선택한다. 저장 성공 후 파일 핸들을 IndexedDB에 보관한다.
+- 같은 브라우저·프로필에서 **같은 경로**의 문서를 다시 열면 연결을 불러온다. 저장 버튼은 해당 파일에 저장하며, 필요하면 브라우저 쓰기 권한만 다시 요청한다.
+- 연결은 문서 ID가 아니라 origin·경로별로 구분한다. 다른 경로로 복사하거나 이동한 문서는 최초 한 번 연결해야 한다. 로컬 파일과 웹 서버로 연 문서도 별도 연결이다.
+- **다른 이름으로**는 매번 파일 선택기를 연다. 새 대상은 현재 탭에서 사용하지만, 원래 문서 경로의 저장 연결은 유지한다. 새 파일을 새 경로로 열면 최초 연결이 필요하다.
+- 권한 거부·취소는 저장하지 않고 종료한다. 연결 파일 삭제는 알림 후 다음 저장에서 재선택한다.
+- IndexedDB 차단·삭제 등으로 연결을 기억할 수 없으면 다음에 재선택한다. 파일 핸들/권한 지속성은 브라우저 환경에 따라 달라진다. File System Access 미지원 환경은 다운로드로 폴백하며, 다운로드 위치 선택창 표시 여부는 브라우저 설정을 따른다.
+- 별도 서버·프로그램·확장 설치는 필요 없다. 브라우저는 `file://`로 연 문서에도 최초 쓰기 권한을 자동 부여하지 않는다.
+
+## 자동저장 복구와 백업 확정
+
+- **복구**: 브라우저 자동저장본을 본문에 반영한다. 파일에도 반영하려면 저장한다.
+- **무시**: 이번 알림만 닫는다. 이전 자동저장본을 남기므로 다시 열 때 알림이 나타날 수 있다.
+- **무시하고 현재 버전으로 백업 확정**: 이전 자동저장본을 현재 본문으로 교체한다. 백업 저장에 성공한 경우에만 알림을 닫는다. 같은 본문으로 다시 열면 알림이 나타나지 않는다. 이후 새로운 미저장 수정은 다시 복구 안내 대상이다.
+- 백업은 같은 브라우저·프로필의 로컬 저장소에 보관되며 파일 저장과 별개다. 백업 확정은 파일 히스토리를 지우지 않는다. 저장소가 차거나 차단된 경우 실패를 알린다.
+- 문서 ID가 있으면 해당 ID, 없으면 문서의 origin과 경로로 백업을 구분한다. 경로 없는 공용 키 `__unsaved__`는 어느 문서의 백업인지 구분할 수 없어 새 엔진에서 자동 연결하지 않는다. 기존 값은 삭제하지 않는다. 구버전의 ID 없는 문서를 업그레이드할 때는 기존 엔진에서 필요한 백업을 먼저 복구·파일 저장한다.
+- 입력 후 700ms에 백업하며, 대기 중 탭을 숨기거나 페이지를 떠날 때 즉시 백업한다. 브라우저 강제 종료까지 보장하는 것은 아니다.
+
+## 배포용 HTML 저장
+
+- 데스크톱의 **배포용 HTML 저장**, 모바일의 **더보기 → 배포용 HTML 저장**으로 현재 본문을 `문서제목-배포용.html` 사본으로 다운로드한다. 실제 저장창 표시 여부는 브라우저 다운로드 설정을 따른다.
+- 배포본에서는 편집 크롬 7블록, 편집기 CSS/JS, 히스토리 JSON, 문서 백업 ID, 임시 편집 레이아웃 상태를 제거한다. 본문 root의 contenteditable도 제거한다.
+- 본문·문서 디자인·도표·문서 자체 스크립트는 보존한다. 문서 스타일이 참조하는 `#doc-content` ID는 유지한다. 편집기로 삽입한 표는 보기 스타일만 남겨 모양을 유지한다.
+- 원본의 편집 모드·본문·히스토리·브라우저 백업·연결된 저장 파일은 바꾸지 않는다. 일반 저장과 독립적인 다운로드이며 원본 파일을 자동 덮어쓰지 않는다.
+- 엔진 style/script의 고정 ID가 없으면 내보내기 실패를 알린다. 구문서 갱신 시 엔진 코드뿐 아니라 태그 ID와 크롬도 함께 교체한다.
+- `DocEditor.getReadOnlyHTML()`로 다운로드 없이 배포용 문자열을 얻을 수 있다. 검증 시 배포본을 다시 열어 `window.DocEditor` 없음, 크롬/히스토리 없음, 현재 본문/디자인 보존을 확인한다.
+- 외부 이미지·폰트·문서 자체 스크립트의 의존성은 그대로다. 이 기능은 편집기 제거이며 다른 리소스를 자동으로 인라인하거나 서버에 게시하지 않는다.
+
+## 기존 HTML에 편집기 추가
+
+- `tools/add-editor.html`은 서버·확장 프로그램이 필요 없는 단독 HTML 도구다. 입력 파일은 브라우저에서 변환하고, 명시적인 다운로드 버튼으로 사본을 받는다. 편집기 안의 **HTML에 편집기 추가**는 파일 선택 후 사본 다운로드를 시작한다.
+- 선택한 파일을 분리된 DOM으로 파싱하며 변환 도중 문서 스크립트를 실행하거나 미리보기 iframe에 렌더링하지 않는다. 완성된 파일에는 문서 자체 스크립트가 보존되어, 사용자가 그 파일을 열면 원래대로 실행된다. 이 도구는 스크립트 제거·정화 도구가 아니다.
+- 기존 편집기·중복/충돌 ID·frameset·인라인 편집기 실행을 제한할 수 있는 CSP meta가 있으면 원본을 변경하지 않고 이유를 알린다. CSP를 자동 삭제하지 않는다. 서버가 보내는 CSP 헤더는 변환된 파일을 배포할 때 별도로 확인한다.
+- `.html`/`.htm`을 받는다. UTF-8, BOM이 있는 UTF-16, charset으로 선언된 EUC-KR 등의 입력을 읽어 UTF-8로 내보낸다. 읽을 수 없는 인코딩은 오류를 표시하며, 글자를 임의로 대체하지 않는다.
+- 새 편집기의 히스토리는 빈 배열로 시작한다. 입력의 편집기 백업 ID는 제거하고, 변환 도구를 실행한 원문서의 본문·히스토리·저장 연결을 새 파일에 복사하지 않는다.
+- `DocEditor.attachToHTML(html)`은 현재 문서의 엔진을 붙인 HTML 문자열을 반환한다. 직접 통합하는 경우 `DocEditorAttach.convert(html, {css, js, chrome})`를 쓴다. `js`는 변환기와 엔진이 모두 포함된 빌드 결과의 script 내용이어야 한다.
+- 변환 결과는 본문 요소와 원래 스타일·스크립트를 유지하지만, 파서의 HTML 정규화·편집 루트 추가·charset/viewport 설정 때문에 원본과 바이트가 같지는 않다. 복잡한 웹앱의 구조 호환성을 자동 보장하지 않는다.
+
+## 모바일 편집 UI
+
+- 900px 이하에서는 상단에 편집·저장·현재 서식·더보기 버튼을 배치한다. 더보기에서 다른 이름으로 저장·배포용 HTML 저장·HTML에 편집기 추가·히스토리·인쇄를 사용한다.
+- 편집 툴바는 상단 버튼 아래 한 줄로 배치하며 좌우 스크롤로 모든 도구에 접근한다. 터치 버튼은 44px, 드롭다운 글자는 16px이다.
+- 현재 서식 패널은 모바일에서 기본으로 접힌다. 현재 서식 버튼으로 펼치고 닫기·본문 터치·Escape로 닫는다. 데스크톱에서는 편집 중 계속 표시한다.
+- 컨트롤과 툴바의 실제 크기를 측정해 본문 상단 여백 및 패널 위치를 갱신한다. 창 회전·크기 변경 및 visualViewport 높이 변경을 반영한다.
+- 편집 UI만 반응형으로 바꾸며 문서 디자인과 본문은 유지한다. 문서 자체의 반응형 스타일은 첫 번째 style에서 별도로 관리한다.
+- 모바일 검증은 320·375·390·430·768px 및 가로 화면에서 수행한다. 보기/편집 전환, 가로 넘침, 툴바 끝 도구 접근, 패널 열기/닫기, 더보기, 히스토리, 저장된 정적 상태를 확인한다. 짧은 viewport 검증은 실제 iOS/Android 키보드 검증을 대신하지 않는다.
+
+## 디자인 중립 / 테마
+
+- 편집 UI 색은 `--doc-ed-*`(기본값 중립 블루)가 담당한다. 문서 팔레트를 읽지도 덮지도 않는다.
+- 편집 UI를 문서 테마에 맞추려면 문서 `:root`에 `--doc-ed-accent`(및 `-deep`/`-soft`/`-line`)만 정의하면 된다. 예: `examples/demo-src.html`(에메랄드).
+- 문서 `<style>`에서 `h2`·`p`·`table` 같은 맨-태그 셀렉터를 자유롭게 써도 된다. 크롬은 `doc-*`/`--doc-ed-*`를 사용하지만 Shadow DOM 격리는 아니므로 전역 스타일의 영향을 확인한다. 툴바가 삽입하는 표는 `#doc-content table.doc-ed-table`로 스코프되어 문서 표 스타일과 공존한다.
+- 상시 노출되는 크롬은 컨트롤(데스크톱 우상단 플로팅, 모바일 상단 고정)이다. 편집 툴바·패널은 편집 모드에서만, 인쇄 시 모든 크롬 숨김.
+
+## 검증 (완성 선언 전 실측)
+
+로컬 서버(`python3 -m http.server`로 폴더 서빙)나 `file://`로 문서를 연 뒤, DevTools 콘솔(또는 preview 도구)에서 아래를 실행한다 (`pass:true`까지 수정):
+
+```js
+(function(){
+  var o={}, ed=window.DocEditor;
+  o.engine=!!ed; o.content=!!document.getElementById('doc-content');
+  ed && ed.edit(true);
+  o.editbarShown=getComputedStyle(document.getElementById('doc-editbar')).display!=='none';
+  var mobile=matchMedia('(max-width:900px)').matches;
+  if(mobile && !document.body.classList.contains('doc-inspector-open')) document.getElementById('doc-inspectorToggle').click();
+  o.inspectorShown=getComputedStyle(document.getElementById('doc-inspector')).display!=='none';
+  var html=ed?ed.getHTML():'';
+  var parsed=new DOMParser().parseFromString(html,'text/html');
+  o.serClean=/^<!DOCTYPE html>/.test(html) && parsed.querySelectorAll('#doc-content').length===1 && parsed.querySelector('#doc-content').getAttribute('contenteditable')==='false' && !parsed.body.classList.contains('doc-editing');
+  o.engineInlined=/window\.DocEditor=/.test(html);
+  ed && ed.edit(false);
+  o.viewStatic=getComputedStyle(document.getElementById('doc-editbar')).display==='none';
+  o.pass=o.engine&&o.content&&o.editbarShown&&o.inspectorShown&&o.serClean&&o.engineInlined&&o.viewStatic;
+  return JSON.stringify(o);
+})()
+```
+
+복구 회귀 검증: 이전 백업 만들기 → 재열기 → 무시 → 재열기 시 알림 유지 → 백업 확정 → 재열기 시 알림 없음 → 새 수정 후 재열기 시 복구 가능. 빈 본문 복구와 저장소 실패 시 알림 유지도 확인한다.
+
+추가 육안 확인: 편집 토글 → 본문 글자 클릭·수정, 굵게/크기/색 적용 시 속성 패널 반영, 표 삽입, 저장(같은 파일 덮어쓰기는 File System Access 지원 환경에서 최초 파일 선택 후 재열기 시 연결 재사용, 필요 시 권한 재확인). `File System Access` 미지원 브라우저(Safari/Firefox)는 다운로드로 폴백한다.
+
+## 체크리스트 (산출 전)
+
+- [ ] 유지보수 시 빌드 `--check` 통과, 복구·무시·백업 확정의 재열기 동작 검증
+- [ ] 본문이 `#doc-content` 안에 있고, id는 문서에 유일 (grep이 아니라 DOM에서 확인: `document.querySelectorAll('#doc-content').length===1`. 엔진 소스 문자열에 같은 id가 텍스트로 들어 있어 grep은 오탐)
+- [ ] 크롬 마크업 7블록 + `#doc-history` + 엔진 css/js 인라인 (원문 그대로)
+- [ ] 콘솔 오류 0, 위 스니펫 `pass:true`
+- [ ] 보기 모드가 기본이고 완전 정적 (편집 흔적 없이 저장됨)
+- [ ] 문서 색은 문서 `<style>`에서만, 편집 UI 색은 `--doc-ed-*`에서만
+
+## 흔한 실수
+
+| 실수 | 결과 → 교정 |
+|---|---|
+| 엔진 css/js를 수정·요약 | 편집 기능 파손 → `skeleton.html` 그대로 복사, 고칠 땐 `assets/`에서만 후 재빌드 |
+| 본문을 `#doc-content` 밖에 배치 | 편집 불가 → 본문을 `#doc-content` 안으로 |
+| 문서 색을 `--doc-ed-*`로 지정 | 편집 UI만 바뀜 → 문서 색은 문서 자체 변수/스타일로 |
+| 크롬 마크업 일부 누락 | 해당 버튼·패널 미동작 → 7블록 전부 포함 |
+| 모든 브라우저에서 동일 동작한다고 가정 | contenteditable+execCommand 기반이며 명령·선택 동작은 대상 브라우저에서 실측한다. 지원하지 않는 저장 API는 다운로드로 폴백한다. |

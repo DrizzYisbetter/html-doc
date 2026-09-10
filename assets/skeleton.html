@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>편집 가능한 문서</title>
+<style>
+/* ===== 문서 디자인 (자유롭게 교체·확장) ===== */
+:root{ color-scheme:light; }
+body{ margin:0; font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif; color:#1f2937; background:#fff; line-height:1.7; font-size:16px; -webkit-font-smoothing:antialiased; }
+#doc-content{ max-width:820px; margin:0 auto; padding:56px 24px 140px; }
+#doc-content h1{ font-size:30px; font-weight:800; letter-spacing:-.3px; margin:0 0 14px; }
+#doc-content h2{ font-size:21px; font-weight:800; margin:32px 0 10px; }
+#doc-content h3{ font-size:17px; font-weight:700; margin:22px 0 8px; }
+#doc-content p{ margin:12px 0; }
+#doc-content blockquote{ margin:14px 0; padding:8px 16px; border-left:3px solid #cbd5e1; color:#475569; }
+#doc-content ul,#doc-content ol{ margin:10px 0; padding-left:22px; }
+</style>
+
+<!-- ===== doc-editor 엔진 스타일 (인라인 · 수정 금지) ===== -->
+<style id="doc-editor-style">
+/* ============================================================
+   doc-editor: 임의 HTML 문서에 얹는 편집 크롬 스타일
+   (html-doc 스킬 · 문서에 그대로 인라인. 수정·요약 금지)
+
+   설계 원칙
+   - 모든 색은 --doc-ed-* 네임스페이스 var()+폴백. 문서 팔레트를
+     읽지도 덮지도 않음. 문서가 --doc-ed-accent 등을 정의하면
+     편집 UI 색만 선택적으로 그 값을 따른다.
+   - 크롬은 전부 position:fixed 플로팅. 문서 레이아웃을 리플로하지 않음.
+   - 보기 모드: 컨트롤 클러스터만 노출. 편집 모드에서만 툴바·패널 등장.
+   - 본문 편집은 #doc-content에 한정. 별도 크롬과 body 편집 상태를 관리.
+   ============================================================ */
+
+/* ---------- 컨트롤 클러스터 (항상 노출 · 편집 재진입/저장 통로) ---------- */
+#doc-controls{
+  position:fixed; top:12px; right:14px; z-index:2147483001;
+  display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:flex-end;
+  font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
+}
+.doc-ed-btn{
+  font-family:inherit; font-weight:700; font-size:12.5px; line-height:1.3; cursor:pointer;
+  border:1px solid var(--doc-ed-line,#e5e7eb); background:var(--doc-ed-paper,#fff);
+  color:var(--doc-ed-ink-2,#374151); padding:7px 12px; border-radius:8px;
+  box-shadow:0 1px 3px rgba(16,24,40,.10); transition:.13s;
+}
+.doc-ed-btn:hover{ background:#f2f4f7; }
+.doc-ed-btn.on{ background:var(--doc-ed-accent,#2563eb); color:#fff; border-color:var(--doc-ed-accent,#2563eb); }
+.doc-ed-btn.primary{ background:var(--doc-ed-accent,#2563eb); color:#fff; border-color:var(--doc-ed-accent,#2563eb); }
+.doc-ed-btn.primary:hover{ background:var(--doc-ed-accent-deep,#1d4ed8); }
+.doc-ed-btn.ghost{ background:var(--doc-ed-paper,#fff); box-shadow:none; }
+
+/* ---------- 편집 툴바 (편집 모드에서만) ---------- */
+#doc-editbar{
+  position:fixed; top:0; left:0; right:0; z-index:2147483000;
+  display:none; align-items:center; gap:5px; flex-wrap:wrap;
+  background:var(--doc-ed-ink,#1f2937); color:#fff; padding:7px 14px;
+  padding-right:calc(var(--doc-ed-controls-width,380px) + 28px); /* 실제 컨트롤 폭만큼 확보 */
+  box-shadow:0 4px 14px rgba(16,24,40,.22);
+  font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
+}
+body.doc-editing #doc-editbar{ display:flex; }
+#doc-editbar .doc-ed-g{
+  display:flex; align-items:center; gap:4px; padding-right:8px; margin-right:2px;
+  border-right:1px solid rgba(255,255,255,.14);
+}
+#doc-editbar .doc-ed-g:last-child{ border-right:none; }
+.doc-ed-eb{
+  min-width:30px; height:30px; padding:0 8px; border:1px solid rgba(255,255,255,.2);
+  background:rgba(255,255,255,.1); color:#fff; border-radius:7px; cursor:pointer;
+  font-family:inherit; font-weight:700; font-size:13px; line-height:1; display:inline-flex; align-items:center; justify-content:center;
+}
+.doc-ed-eb:hover{ background:rgba(255,255,255,.22); }
+.doc-ed-eb.active{ background:var(--doc-ed-accent,#2563eb); border-color:var(--doc-ed-accent,#2563eb); }
+.doc-ed-eb.b{ font-weight:900; } .doc-ed-eb.i{ font-style:italic; }
+.doc-ed-eb.u{ text-decoration:underline; } .doc-ed-eb.s{ text-decoration:line-through; }
+.doc-ed-esel{
+  height:30px; border:1px solid rgba(255,255,255,.2); background:#374151; color:#fff;
+  border-radius:7px; font-family:inherit; font-weight:600; font-size:12.5px; line-height:1; padding:0 8px; cursor:pointer;
+}
+.doc-ed-esel option{ color:#111; }
+.doc-ed-ecol{
+  display:inline-flex; align-items:center; gap:4px; background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.18); border-radius:7px; padding:0 6px; height:30px;
+}
+.doc-ed-ecol label{ font-size:10.5px; color:#aeb6bf; font-weight:700; }
+.doc-ed-ecol input[type=color]{ width:22px; height:22px; border:none; background:none; padding:0; cursor:pointer; }
+.doc-ed-ecol input[type=color]::-webkit-color-swatch-wrapper{ padding:0; }
+.doc-ed-ecol input[type=color]::-webkit-color-swatch{ border:1px solid rgba(255,255,255,.4); border-radius:4px; }
+.doc-ed-ecol .mini{ background:rgba(255,255,255,.12); border:none; color:#cfd5db; border-radius:5px; height:22px; padding:0 6px; cursor:pointer; font-size:11px; }
+
+/* ---------- 속성 패널 (편집 모드 · 우측 플로팅) ---------- */
+#doc-inspector{
+  position:fixed; top:calc(var(--doc-ed-tools-bottom,48px) + 8px); right:14px; width:276px; z-index:2147483000;
+  max-height:calc(var(--doc-ed-visible-height,100vh) - var(--doc-ed-tools-bottom,48px) - 24px); overflow:auto; display:none;
+  font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
+}
+body.doc-editing #doc-inspector{ display:block; }
+.doc-ed-insp-card{
+  background:var(--doc-ed-paper,#fff); border:1px solid var(--doc-ed-line,#e5e7eb);
+  border-radius:14px; overflow:hidden; box-shadow:0 6px 22px rgba(16,24,40,.14);
+}
+.doc-ed-insp-h{
+  padding:11px 15px; border-bottom:1px solid var(--doc-ed-hair,#eef0f2);
+  font-weight:800; font-size:13px; display:flex; align-items:center; gap:8px; color:var(--doc-ed-ink,#1f2937);
+}
+.doc-ed-insp-h .d{ width:7px; height:7px; border-radius:50%; background:var(--doc-ed-accent,#2563eb); }
+.doc-ed-insp-b{ padding:4px 15px 12px; }
+.doc-ed-irow{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:9px 0; border-bottom:1px solid var(--doc-ed-hair,#eef0f2);
+}
+.doc-ed-irow:last-child{ border-bottom:none; }
+.doc-ed-ik{ color:var(--doc-ed-muted,#6b7280); font-size:12px; font-weight:600; }
+.doc-ed-iv{ font-size:13px; font-weight:700; color:var(--doc-ed-ink,#1f2937); text-align:right; max-width:158px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.doc-ed-sw{ display:inline-flex; align-items:center; gap:7px; justify-content:flex-end; }
+.doc-ed-sw i{
+  width:15px; height:15px; border-radius:4px; border:1px solid var(--doc-ed-line,#e5e7eb); display:inline-block;
+  background-image:linear-gradient(45deg,#d8d8d2 25%,transparent 25%,transparent 75%,#d8d8d2 75%),linear-gradient(45deg,#d8d8d2 25%,#fff 25%,#fff 75%,#d8d8d2 75%);
+  background-size:8px 8px; background-position:0 0,4px 4px;
+}
+.doc-ed-ichips{ display:flex; flex-wrap:wrap; gap:5px; justify-content:flex-end; }
+.doc-ed-ichip{ font-size:11px; padding:2px 8px; border-radius:6px; background:var(--doc-ed-paper-2,#f8fafc); color:var(--doc-ed-muted,#6b7280); border:1px solid var(--doc-ed-hair,#eef0f2); font-weight:700; }
+.doc-ed-ichip.on{ background:var(--doc-ed-accent-soft,#eef2ff); color:var(--doc-ed-accent-deep,#1d4ed8); border-color:var(--doc-ed-accent-line,#c7d2fe); }
+.doc-ed-insp-hint{ font-size:11.5px; color:var(--doc-ed-muted,#6b7280); padding:9px 15px 13px; border-top:1px solid var(--doc-ed-hair,#eef0f2); line-height:1.55; }
+
+/* ---------- 편집 affordance (문서 클래스 비의존 범용 셀렉터) ---------- */
+body.doc-editing #doc-content{ outline:none; }
+body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th,dd,dt,blockquote,figcaption):hover{
+  box-shadow:0 0 0 2px var(--doc-ed-accent-line,#c7d2fe) inset; border-radius:4px;
+}
+body.doc-editing #doc-content :focus{ box-shadow:0 0 0 2px var(--doc-ed-accent,#2563eb) inset; border-radius:4px; }
+
+/* 편집 플래그 (편집 모드 하단 안내) */
+#doc-editflag{ display:none; }
+body.doc-editing #doc-editflag{
+  display:flex; align-items:center; gap:7px; position:fixed; left:50%; bottom:20px; transform:translateX(-50%); z-index:2147483000;
+  background:var(--doc-ed-ink,#1f2937); color:#fff; font-weight:700; font-size:12px; line-height:1.3; padding:8px 16px; border-radius:20px; box-shadow:0 6px 18px rgba(16,24,40,.3);
+  font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
+}
+
+/* ---------- 삽입 표 (중립 최소 스타일 · 문서 스타일이 있으면 그쪽 우선) ---------- */
+.doc-ed-tablewrap{ overflow-x:auto; margin:8px 0; }
+#doc-content table.doc-ed-table{ border-collapse:collapse; width:100%; }
+#doc-content table.doc-ed-table th, #doc-content table.doc-ed-table td{
+  border:1px solid var(--doc-ed-line,#d7dbe0); padding:8px 10px; text-align:left; vertical-align:top;
+}
+#doc-content table.doc-ed-table th{ font-weight:700; background:var(--doc-ed-paper-2,#f8fafc); }
+
+/* ---------- 배너 / 토스트 / 모달 ---------- */
+#doc-restore-banner{
+  position:fixed; left:50%; top:14px; transform:translateX(-50%); z-index:2147483002; display:none;
+  background:#fff; border:1px solid var(--doc-ed-line,#e5e7eb); box-shadow:0 8px 24px rgba(16,24,40,.16);
+  border-radius:10px; padding:11px 14px; align-items:center; gap:10px; flex-wrap:wrap;
+  box-sizing:border-box; width:max-content; max-width:calc(100vw - 28px);
+  font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
+}
+#doc-restore-banner.show{ display:flex; }
+#doc-restore-banner .doc-ed-btn{ white-space:normal; max-width:100%; }
+#doc-restore-banner .msg{ flex:1 1 230px; font-size:13px; color:var(--doc-ed-ink,#1f2937); } #doc-restore-banner .msg b{ color:var(--doc-ed-accent-deep,#1d4ed8); }
+#doc-toast{
+  position:fixed; left:50%; bottom:64px; transform:translateX(-50%) translateY(16px); z-index:2147483003;
+  background:var(--doc-ed-ink,#1f2937); color:#fff; padding:10px 16px; border-radius:9px; font-size:13px;
+  opacity:0; pointer-events:none; transition:.18s; max-width:80vw;
+  font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
+}
+#doc-toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+.doc-ed-modal{ position:fixed; inset:0; z-index:2147483004; display:none; background:rgba(16,24,40,.42);
+  font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif; }
+.doc-ed-modal.open{ display:flex; align-items:center; justify-content:center; padding:28px; }
+.doc-ed-modal-card{ background:#fff; border-radius:14px; box-shadow:0 20px 60px rgba(16,24,40,.28); width:min(960px,100%); max-height:88vh; display:flex; flex-direction:column; overflow:hidden; }
+.doc-ed-modal-head{ display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--doc-ed-line,#e5e7eb); }
+.doc-ed-modal-head h3{ margin:0; font-size:16px; color:var(--doc-ed-ink,#1f2937); }
+.doc-ed-modal-body{ display:flex; min-height:0; flex:1; }
+#doc-hist-list{ flex:0 0 280px; border-right:1px solid var(--doc-ed-line,#e5e7eb); overflow:auto; padding:10px; }
+.doc-ed-hist-item{ display:flex; flex-direction:column; gap:2px; width:100%; text-align:left; border:1px solid var(--doc-ed-line,#e5e7eb); background:#fff; border-radius:8px; padding:9px 11px; margin-bottom:7px; cursor:pointer; font-family:inherit; }
+.doc-ed-hist-item:hover{ background:var(--doc-ed-paper-2,#f8fafc); }
+.doc-ed-hist-item strong{ font-size:13px; font-weight:700; color:var(--doc-ed-ink,#1f2937); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.doc-ed-hist-item span{ font-size:11px; color:var(--doc-ed-muted,#6b7280); }
+#doc-hist-preview{ flex:1; overflow:auto; padding:16px 18px; background:var(--doc-ed-paper-2,#f8fafc); }
+.doc-ed-hist-actions{ display:flex; justify-content:flex-end; margin-bottom:12px; }
+.doc-ed-hist-doc{ background:#fff; border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:8px; padding:18px 20px; zoom:.8; }
+.doc-ed-muted{ color:var(--doc-ed-muted,#6b7280); }
+
+
+/* ---------- 컨트롤 메뉴 / 접근성 ---------- */
+#doc-more-actions{ display:flex; gap:6px; }
+#doc-attachFile{ display:none!important; }
+#doc-moreToggle, #doc-inspectorToggle, #doc-inspectorClose{ display:none; }
+#doc-controls *, #doc-editbar *, #doc-inspector *, #doc-history-modal *{ box-sizing:border-box; }
+#doc-controls, #doc-editbar, #doc-inspector, #doc-history-modal{ box-sizing:border-box; }
+#doc-controls button, #doc-editbar button, #doc-inspectorClose{ touch-action:manipulation; }
+#doc-controls button:focus-visible, #doc-editbar :is(button,select,input):focus-visible,
+#doc-inspectorClose:focus-visible{ outline:2px solid var(--doc-ed-accent,#2563eb); outline-offset:2px; }
+#doc-content{ scroll-margin-top:calc(var(--doc-ed-tools-bottom,0px) + 16px); }
+body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-top:calc(var(--doc-ed-tools-bottom,0px) + 16px); }
+.doc-ed-modal-body, #doc-hist-preview{ min-width:0; }
+
+/* ---------- 모바일·태블릿: 고정된 두 줄과 접이식 패널 ---------- */
+@media(max-width:900px){
+  #doc-controls{
+    top:0; left:0; right:0; gap:6px; flex-wrap:nowrap; justify-content:flex-end;
+    padding:8px max(8px,env(safe-area-inset-right)) 8px max(8px,env(safe-area-inset-left));
+    padding-top:max(8px,env(safe-area-inset-top));
+    background:var(--doc-ed-paper,#fff); border-bottom:1px solid var(--doc-ed-line,#e5e7eb);
+    box-shadow:0 2px 8px rgba(16,24,40,.08);
+  }
+  #doc-controls > .doc-ed-btn{ min-height:44px; padding:8px 10px; white-space:nowrap; }
+  #doc-editToggle{ margin-right:auto; }
+  #doc-moreToggle{ display:block; }
+  body.doc-editing #doc-inspectorToggle{ display:block; }
+  #doc-more-actions{
+    display:none; position:absolute; top:calc(100% + 6px); right:8px; width:180px;
+    padding:6px; border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:12px;
+    background:var(--doc-ed-paper,#fff); box-shadow:0 8px 24px rgba(16,24,40,.18);
+    max-height:calc(var(--doc-ed-visible-height,100dvh) - var(--doc-ed-controls-height,60px) - 20px); overflow-y:auto;
+  }
+  #doc-controls.doc-more-open #doc-more-actions{ display:flex; flex-direction:column; }
+  #doc-more-actions .doc-ed-btn{ min-height:44px; text-align:left; }
+  #doc-editbar{
+    top:var(--doc-ed-controls-height,60px); padding:6px 8px;
+    flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; gap:6px;
+    overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; scrollbar-width:thin;
+  }
+  #doc-editbar .doc-ed-g{ flex:0 0 auto; padding-right:6px; }
+  #doc-editbar .doc-ed-eb{ height:44px; min-width:44px; }
+  #doc-editbar .doc-ed-esel{ height:44px; font-size:16px; max-width:150px; }
+  #doc-editbar .doc-ed-ecol{ height:44px; }
+  #doc-editbar .doc-ed-ecol input[type=color]{ width:36px; height:36px; }
+  #doc-editbar .doc-ed-ecol .mini{ min-height:36px; padding:0 10px; }
+  body.doc-editing #doc-inspector{ display:none; }
+  body.doc-editing.doc-inspector-open #doc-inspector{ display:block; }
+  #doc-inspector{ left:8px; right:8px; width:auto; }
+  #doc-inspectorClose{ display:block; margin-left:auto; min-height:44px; }
+  #doc-inspector .doc-ed-insp-h{ padding:6px 12px; }
+  body.doc-editing #doc-editflag{ display:none; }
+  #doc-restore-banner{ top:calc(var(--doc-ed-controls-height,60px) + 8px); max-height:calc(var(--doc-ed-visible-height,100dvh) - var(--doc-ed-controls-height,60px) - 24px); overflow-y:auto; }
+  #doc-restore-banner .doc-ed-btn{ min-height:44px; }
+  #doc-toast{ bottom:16px; max-width:calc(100vw - 24px); box-sizing:border-box; }
+  .doc-ed-modal.open{ padding:10px; }
+  .doc-ed-modal-card{ width:100%; max-height:calc(var(--doc-ed-visible-height,100dvh) - 20px); }
+  .doc-ed-modal-head .doc-ed-btn{ min-height:44px; }
+  .doc-ed-modal-body{ flex-direction:column; overflow-y:auto; }
+  #doc-hist-list{ flex:0 0 auto; max-height:28vh; max-height:28dvh; border-right:0; border-bottom:1px solid var(--doc-ed-line,#e5e7eb); }
+  #doc-hist-preview{ flex:0 0 auto; padding:12px; }
+  .doc-ed-hist-doc{ padding:12px; overflow:auto; }
+}
+
+/* ---------- 인쇄: 크롬 전부 숨김 ---------- */
+@media print{
+  #doc-controls, #doc-editbar, #doc-inspector, #doc-editflag,
+  #doc-restore-banner, #doc-toast, .doc-ed-modal{ display:none !important; }
+}
+
+</style>
+</head>
+<body>
+
+<!-- ========================================================
+     doc-editor 크롬 마크업 (엔진이 참조하는 고정 id · 수정 금지)
+     ======================================================== -->
+<div id="doc-controls">
+  <button class="doc-ed-btn" id="doc-editToggle" title="편집 모드 (Cmd/Ctrl+E)">✎ 편집</button>
+  <button class="doc-ed-btn primary" id="doc-saveBtn" title="최초 저장 시 대상 파일 선택 (Cmd/Ctrl+S)">저장</button>
+  <button class="doc-ed-btn" id="doc-inspectorToggle" aria-expanded="false" aria-controls="doc-inspector">현재 서식</button>
+  <button class="doc-ed-btn" id="doc-moreToggle" aria-expanded="false" aria-controls="doc-more-actions">더보기 ▾</button>
+  <div id="doc-more-actions">
+  <button class="doc-ed-btn ghost" id="doc-saveAsBtn" title="새 파일로 저장">다른 이름으로</button>
+  <button class="doc-ed-btn ghost" id="doc-exportBtn" title="편집기와 히스토리를 뺀 별도 HTML 내려받기">배포용 HTML 저장</button>
+  <button class="doc-ed-btn ghost" id="doc-attachBtn" title="다른 HTML 파일을 선택해 편집 가능한 사본으로 다운로드">HTML에 편집기 추가</button>
+  <input id="doc-attachFile" type="file" accept=".html,.htm,text/html" hidden>
+  <button class="doc-ed-btn ghost" id="doc-historyBtn" title="이전 저장본 보기·복원">히스토리</button>
+  <button class="doc-ed-btn ghost" id="doc-printBtn" title="인쇄">인쇄</button>
+  </div>
+</div>
+
+<div id="doc-editbar" role="toolbar" aria-label="서식 도구 (좁은 화면에서는 좌우로 넘겨 사용)">
+  <div class="doc-ed-g">
+    <select class="doc-ed-esel" id="doc-ebBlock" title="단락 스타일">
+      <option value="p">본문</option><option value="h1">제목 1</option><option value="h2">제목 2</option><option value="h3">제목 3</option><option value="blockquote">인용</option>
+    </select>
+    <select class="doc-ed-esel" id="doc-ebFont" title="글씨체">
+      <option value="">글씨체</option>
+      <option value="-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif">기본(고딕)</option>
+      <option value="Georgia,'Noto Serif KR',serif">세리프</option>
+      <option value="ui-monospace,'JetBrains Mono',Menlo,monospace">고정폭</option>
+    </select>
+    <select class="doc-ed-esel" id="doc-ebSize" title="글씨 크기">
+      <option value="">크기</option>
+      <option>12</option><option>13</option><option>14</option><option>15</option><option>16</option>
+      <option>18</option><option>20</option><option>24</option><option>28</option><option>32</option><option>40</option>
+    </select>
+  </div>
+  <div class="doc-ed-g">
+    <button class="doc-ed-eb b" data-cmd="bold" title="굵게">B</button>
+    <button class="doc-ed-eb i" data-cmd="italic" title="기울임">I</button>
+    <button class="doc-ed-eb u" data-cmd="underline" title="밑줄">U</button>
+    <button class="doc-ed-eb s" data-cmd="strikeThrough" title="취소선">S</button>
+  </div>
+  <div class="doc-ed-g">
+    <span class="doc-ed-ecol"><label>글자</label><input type="color" id="doc-ebColor" value="#1f2937"></span>
+    <span class="doc-ed-ecol"><label>배경</label><input type="color" id="doc-ebBg" value="#fff3a3"><button class="mini" id="doc-ebBgClear" title="배경 지움">지움</button></span>
+  </div>
+  <div class="doc-ed-g">
+    <button class="doc-ed-eb" data-cmd="justifyLeft" title="왼쪽 정렬">⇤</button>
+    <button class="doc-ed-eb" data-cmd="justifyCenter" title="가운데 정렬">≡</button>
+    <button class="doc-ed-eb" data-cmd="justifyRight" title="오른쪽 정렬">⇥</button>
+  </div>
+  <div class="doc-ed-g">
+    <button class="doc-ed-eb" data-cmd="insertUnorderedList" title="불릿 목록">• 목록</button>
+    <button class="doc-ed-eb" data-cmd="insertOrderedList" title="번호 목록">1. 목록</button>
+    <button class="doc-ed-eb" data-cmd="outdent" title="내어쓰기">◂</button>
+    <button class="doc-ed-eb" data-cmd="indent" title="들여쓰기">▸</button>
+  </div>
+  <div class="doc-ed-g">
+    <button class="doc-ed-eb" id="doc-ebTable" title="표 삽입">표</button>
+    <button class="doc-ed-eb" data-cmd="removeFormat" title="서식 지우기">서식↺</button>
+  </div>
+</div>
+
+<aside id="doc-inspector">
+  <div class="doc-ed-insp-card">
+    <div class="doc-ed-insp-h"><span class="d"></span>현재 서식<button class="doc-ed-btn" id="doc-inspectorClose" aria-label="현재 서식 닫기">닫기</button></div>
+    <div class="doc-ed-insp-b">
+      <div class="doc-ed-irow"><span class="doc-ed-ik">단락 스타일</span><span class="doc-ed-iv" id="doc-i-block">본문</span></div>
+      <div class="doc-ed-irow"><span class="doc-ed-ik">글씨 크기</span><span class="doc-ed-iv" id="doc-i-size">-</span></div>
+      <div class="doc-ed-irow"><span class="doc-ed-ik">글씨체</span><span class="doc-ed-iv" id="doc-i-font">-</span></div>
+      <div class="doc-ed-irow"><span class="doc-ed-ik">글자색</span><span class="doc-ed-iv"><span class="doc-ed-sw"><i id="doc-i-fore-sw"></i><span id="doc-i-fore-tx">-</span></span></span></div>
+      <div class="doc-ed-irow"><span class="doc-ed-ik">배경색</span><span class="doc-ed-iv"><span class="doc-ed-sw"><i id="doc-i-back-sw"></i><span id="doc-i-back-tx">-</span></span></span></div>
+      <div class="doc-ed-irow"><span class="doc-ed-ik">적용된 서식</span><span class="doc-ed-iv"><span class="doc-ed-ichips" id="doc-i-chips">
+        <span class="doc-ed-ichip" data-st="bold">굵게</span><span class="doc-ed-ichip" data-st="italic">기울임</span>
+        <span class="doc-ed-ichip" data-st="underline">밑줄</span><span class="doc-ed-ichip" data-st="strikeThrough">취소선</span>
+      </span></span></div>
+    </div>
+    <div class="doc-ed-insp-hint">내용을 클릭하면 그 위치의 서식이 표시됩니다. 위 툴바로 바꿀 수 있어요.</div>
+  </div>
+</aside>
+
+<div id="doc-editflag">● 편집 모드. 내용을 클릭해 수정하세요</div>
+
+<div id="doc-restore-banner" role="region" aria-label="자동저장 복구">
+  <div class="msg"><b>자동저장본</b>이 있습니다. 복구하시겠어요?</div>
+  <button class="doc-ed-btn primary" id="doc-rb-restore">복구</button>
+  <button class="doc-ed-btn" id="doc-rb-ignore" title="이번에만 알림 닫기. 다음에 열면 다시 안내합니다.">무시</button>
+  <button class="doc-ed-btn" id="doc-rb-keep-current" title="이전 자동저장본을 현재 본문으로 교체합니다. 파일 저장과는 별개입니다.">무시하고 현재 버전으로 백업 확정</button>
+</div>
+
+<div class="doc-ed-modal" id="doc-history-modal">
+  <div class="doc-ed-modal-card">
+    <div class="doc-ed-modal-head"><h3>저장 히스토리</h3><button class="doc-ed-btn" id="doc-hist-close">닫기</button></div>
+    <div class="doc-ed-modal-body"><div id="doc-hist-list"></div><div id="doc-hist-preview"></div></div>
+  </div>
+</div>
+
+<div id="doc-toast" role="status" aria-live="polite"></div>
+
+<!-- ========================================================
+     여기부터 문서 본문. #doc-content 안을 자유롭게 작성한다.
+     (이 영역만 편집 대상. 디자인·구조 제약 없음)
+     ======================================================== -->
+<main id="doc-content" contenteditable="false">
+
+  <h1>문서 제목</h1>
+  <p>여기에 내용을 작성하세요. 오른쪽 위 <strong>✎ 편집</strong> 버튼(또는 Cmd/Ctrl+E)을 누르면 글자·서식을 직접 고칠 수 있고, <strong>저장</strong>으로 같은 파일에 덮어쓸 수 있습니다.</p>
+
+</main>
+
+<script type="application/json" id="doc-history">[]</script>
+
+<!-- ===== doc-editor 엔진 (인라인 · 수정 금지) ===== -->
+<script id="doc-editor-script">
+/* 기존 HTML을 실행하지 않고 편집 가능한 사본으로 변환한다. */
+(function(){
+  'use strict';
+  var chromeIds=['doc-controls','doc-editbar','doc-inspector','doc-editflag','doc-restore-banner','doc-history-modal','doc-toast'];
+
+  function bundleFrom(doc){
+    var style=doc.getElementById('doc-editor-style'), script=doc.getElementById('doc-editor-script');
+    if(!style || !script) throw new Error('편집기 원본을 찾지 못했습니다. 최신 예시를 사용해 주세요.');
+    var chrome=chromeIds.map(function(id){
+      var source=doc.getElementById(id);
+      if(!source) throw new Error('편집기 UI가 누락되었습니다: '+id);
+      var el=source.cloneNode(true);
+      el.classList.remove('show','open','doc-more-open');
+      el.querySelectorAll('[aria-expanded]').forEach(function(b){b.setAttribute('aria-expanded','false');});
+      el.querySelectorAll('.on').forEach(function(b){b.classList.remove('on');});
+      el.querySelectorAll('#doc-hist-list,#doc-hist-preview').forEach(function(b){b.textContent='';});
+      var toggle=el.querySelector('#doc-editToggle');if(toggle)toggle.textContent='✎ 편집';
+      var save=el.querySelector('#doc-saveBtn');if(save)save.title='최초 저장 시 대상 파일 선택 (Cmd/Ctrl+S)';
+      var attach=el.querySelector('#doc-attachBtn');if(attach)attach.disabled=false;
+      var msg=el.querySelector('.msg');if(id==='doc-restore-banner' && msg)msg.textContent='자동저장본이 있습니다. 복구하시겠어요?';
+      if(id==='doc-toast')el.textContent='';
+      return el.outerHTML;
+    }).join('\n');
+    return {css:style.textContent,js:script.textContent,chrome:chrome};
+  }
+
+  function convert(source,bundle){
+    if(typeof source!=='string' || !source.trim())throw new Error('비어 있는 HTML 파일입니다.');
+    if(!bundle || !bundle.css || !bundle.js || !bundle.chrome)throw new Error('편집기 구성 파일이 누락되었습니다.');
+    // 분리된 문서로만 파싱한다. 선택한 HTML을 현재 페이지나 미리보기 iframe에 넣지 않는다.
+    var doc=new DOMParser().parseFromString(source,'text/html');
+    if(doc.querySelector('frameset'))throw new Error('frameset 문서는 지원하지 않습니다. 본문 HTML 파일을 선택해 주세요.');
+    var installed=doc.querySelector('#doc-editor-script,#doc-editor-style,#doc-history,#doc-controls');
+    if(installed || Array.prototype.some.call(doc.scripts,function(s){return /window\.DocEditor\s*=/.test(s.textContent);})){
+      throw new Error('이미 편집기가 있거나 편집기와 같은 ID를 쓰는 파일입니다. 중복으로 추가하지 않았습니다.');
+    }
+    var policy=Array.prototype.some.call(doc.querySelectorAll('meta[http-equiv]'),function(m){return m.httpEquiv.toLowerCase()==='content-security-policy';});
+    if(policy)throw new Error('이 파일에는 CSP 보안 정책이 있습니다. 정책을 유지한 채 편집기를 실행할 수 있는지 별도 검토가 필요합니다.');
+    var roots=doc.querySelectorAll('#doc-content');
+    if(roots.length>1 || (roots.length && (!doc.body.contains(roots[0]) || roots[0]===doc.body || /^(SCRIPT|STYLE|TEMPLATE|INPUT|TEXTAREA|IMG|SVG|TABLE)$/.test(roots[0].tagName)))){
+      throw new Error('doc-content ID가 중복되었거나 본문 컨테이너가 아닙니다. ID 충돌을 먼저 정리해 주세요.');
+    }
+    var chrome=doc.createElement('template');chrome.innerHTML=bundle.chrome;
+    chrome.content.querySelectorAll('[id]').forEach(function(el){
+      if(doc.getElementById(el.id))throw new Error('편집기 ID와 충돌합니다: '+el.id+'. 기존 문서는 변경하지 않았습니다.');
+    });
+    var root=roots[0];
+    if(!root){
+      root=doc.createElement('main');root.id='doc-content';
+      // 새 박스를 만들지 않아 body의 flex/grid 자식 배치를 유지한다.
+      root.style.display='contents';
+      while(doc.body.firstChild)root.appendChild(doc.body.firstChild);
+      doc.body.appendChild(root);
+    }
+    root.setAttribute('contenteditable','false');
+    doc.body.removeAttribute('data-doc-id');
+    // 입력 인코딩과 관계없이 다운로드는 UTF-8이다. 원래의 charset 선언만 갱신한다.
+    doc.querySelectorAll('meta[charset]').forEach(function(m){m.setAttribute('charset','utf-8');});
+    doc.querySelectorAll('meta[http-equiv]').forEach(function(m){if(m.httpEquiv.toLowerCase()==='content-type')m.setAttribute('content','text/html; charset=utf-8');});
+    if(!doc.querySelector('meta[charset]')){var charset=doc.createElement('meta');charset.setAttribute('charset','utf-8');doc.head.prepend(charset);}
+    if(!doc.querySelector('meta[name="viewport" i]')){var viewport=doc.createElement('meta');viewport.name='viewport';viewport.content='width=device-width, initial-scale=1';doc.head.appendChild(viewport);}
+    var style=doc.createElement('style');style.id='doc-editor-style';style.textContent=bundle.css;doc.head.appendChild(style);
+    doc.body.appendChild(chrome.content);
+    var history=doc.createElement('script');history.type='application/json';history.id='doc-history';history.textContent='[]';doc.body.appendChild(history);
+    var script=doc.createElement('script');script.id='doc-editor-script';script.textContent=bundle.js;doc.body.appendChild(script);
+    var doctype=doc.doctype?new XMLSerializer().serializeToString(doc.doctype):'<!DOCTYPE html>';
+    return doctype+'\n'+doc.documentElement.outerHTML;
+  }
+
+  async function readFile(file){
+    if(!file || !/\.html?$/i.test(file.name))throw new Error('HTML 파일(.html 또는 .htm)을 선택해 주세요.');
+    var bytes=new Uint8Array(await file.arrayBuffer()), encoding='utf-8';
+    if(bytes[0]===0xff && bytes[1]===0xfe)encoding='utf-16le';
+    else if(bytes[0]===0xfe && bytes[1]===0xff)encoding='utf-16be';
+    else if(!(bytes[0]===0xef && bytes[1]===0xbb && bytes[2]===0xbf)){
+      var prefix=new TextDecoder('windows-1252').decode(bytes.slice(0,4096));
+      // 주석/본문의 charset 문자열은 무시하고 실제 meta 시작 태그만 검사한다.
+      var sniffed=new DOMParser().parseFromString(prefix,'text/html');
+      var tags=sniffed.querySelectorAll('meta[charset],meta[http-equiv]');
+      for(var i=0;i<tags.length;i++){
+        var charset=tags[i].getAttribute('charset');
+        if(!charset && tags[i].httpEquiv.toLowerCase()==='content-type'){
+          var match=(tags[i].getAttribute('content')||'').match(/\bcharset\s*=\s*["']?\s*([\w-]+)/i);
+          if(match)charset=match[1];
+        }
+        if(charset){encoding=charset;break;}
+      }
+    }
+    try{return new TextDecoder(encoding,{fatal:true}).decode(bytes);}
+    catch(e){throw new Error('파일 인코딩을 읽지 못했습니다. UTF-8 HTML로 저장한 뒤 다시 선택해 주세요.');}
+  }
+  function filename(name){return (name||'문서.html').replace(/\.html?$/i,'').replace(/[\\/:*?"<>|]/g,'')+'-편집가능.html';}
+  window.DocEditorAttach={convert:convert,bundleFrom:bundleFrom,readFile:readFile,filename:filename};
+})();
+
+/* ============================================================
+   doc-editor: 임의 HTML 문서에 얹는 편집 엔진
+   (html-doc 스킬 · 문서에 그대로 인라인. 수정·요약 금지)
+
+   제공: 보기↔편집 토글(⌘/Ctrl+E), 서식 툴바, "현재 서식" 속성 패널,
+         같은 파일 저장(⌘/Ctrl+S · File System Access), 히스토리, 자동저장.
+   계약: 편집 대상은 #doc-content 안의 내용. 크롬 마크업(고정 id)과
+         <script id="doc-history"> 가 문서에 존재해야 함.
+   ============================================================ */
+(function(){
+  'use strict';
+  var content=document.getElementById('doc-content');
+  var histEl=document.getElementById('doc-history');
+  var body=document.body;
+  if(!content){ console.warn('[doc-editor] #doc-content 를 찾지 못했습니다. 편집할 콘텐츠를 <main id="doc-content"> 안에 넣으세요.'); return; }
+  if(!histEl){ histEl=document.createElement('script'); histEl.type='application/json'; histEl.id='doc-history'; histEl.textContent='[]'; document.body.appendChild(histEl); }
+
+  var editing=false, fileHandle=null, savedRange=null, saving=false;
+  var lastSavedHtml=content.innerHTML;
+  var history=loadHistory();
+  var autosaveTimer=null;
+  var lastBackedUpHtml=content.innerHTML;
+  var originalPaddingTop=body.style.paddingTop;
+  var originalPaddingPixels=parseFloat(getComputedStyle(body).paddingTop)||0;
+  var layoutFrame=null;
+  // 다른 문서에 붙일 때 현재 본문·히스토리·파일 연결이 섞이지 않도록 초기 UI만 캡처한다.
+  var attachBundle=null;
+  try{if(window.DocEditorAttach)attachBundle=window.DocEditorAttach.bundleFrom(document);}catch(e){}
+
+  function loadHistory(){ try{ var h=JSON.parse(histEl.textContent||'[]'); return Array.isArray(h)?h.filter(function(v){return v && typeof v.html==='string' && typeof v.title==='string' && typeof v.ts==='string';}).slice(0,30):[]; }catch(e){ return []; } }
+  function escForScript(s){ return s.replace(/</g,'\\u003c'); }
+  function escapeHtml(s){ return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function toast(t){ var el=document.getElementById('doc-toast'); if(!el) return; el.textContent=t; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(function(){el.classList.remove('show');},2600); }
+  function $(id){ return document.getElementById(id); }
+
+  /* ---------- 저장 파일 연결 기억 (브라우저별 IndexedDB) ---------- */
+  // 문서 ID만으로 연결하면 복사한 HTML이 원본 파일을 덮어쓸 수 있어 열었던 경로로 구분한다.
+  var fileLinkKey=location.origin+location.pathname;
+  var rememberAtThisLocation=true;
+  function fileLinkStore(mode, handle){
+    return new Promise(function(resolve){
+      var db=null, tx=null, finished=false, value=null;
+      var timer=setTimeout(function(){ if(tx) try{tx.abort();}catch(e){} finish(false); },1800);
+      function finish(ok){ if(finished) return; finished=true; clearTimeout(timer); if(db) db.close(); resolve({ok:ok,value:value}); }
+      try{
+        var req=indexedDB.open('docedit-file-links',1);
+        req.onupgradeneeded=function(){ if(!req.result.objectStoreNames.contains('files')) req.result.createObjectStore('files'); };
+        req.onerror=function(){ finish(false); };
+        req.onblocked=function(){ finish(false); };
+        req.onsuccess=function(){
+          db=req.result; if(finished){db.close();return;}
+          db.onversionchange=function(){db.close();};
+          try{
+            tx=db.transaction('files',mode==='get'?'readonly':'readwrite');
+            var store=tx.objectStore('files');
+            var op=mode==='get'?store.get(fileLinkKey):(mode==='put'?store.put(handle,fileLinkKey):store.delete(fileLinkKey));
+            op.onsuccess=function(){value=op.result;};
+            tx.oncomplete=function(){finish(true);};
+            tx.onerror=tx.onabort=function(){finish(false);};
+          }catch(e){finish(false);}
+        };
+      }catch(e){finish(false);}
+    });
+  }
+  function updateSaveHint(){
+    var b=$('doc-saveBtn');
+    if(b) b.title=fileHandle?'저장 대상: '+fileHandle.name+' (Cmd/Ctrl+S)':'최초 저장 시 대상 파일 선택 (Cmd/Ctrl+S)';
+  }
+  var fileLinkReady=fileLinkStore('get').then(function(result){
+    var h=result.value;
+    if(h && h.kind==='file' && typeof h.createWritable==='function' && typeof h.queryPermission==='function') fileHandle=h;
+    updateSaveHint();
+  });
+
+  /* ---------- 자동저장 ---------- */
+  function genId(){ return 'doc-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8); }
+  function autosaveKey(){ var id=body.dataset.docId; return 'docedit:autosave:'+(id||('url:'+location.origin+location.pathname)); }
+  function scheduleAutosave(){ clearTimeout(autosaveTimer); autosaveTimer=setTimeout(doAutosave,700); }
+  function writeBackup(){
+    try{ localStorage.setItem(autosaveKey(), JSON.stringify({ts:new Date().toISOString(),html:content.innerHTML})); lastBackedUpHtml=content.innerHTML; return true; }
+    catch(e){ toast('브라우저 백업을 저장하지 못했습니다. 파일로 저장해 주세요.'); return false; }
+  }
+  function doAutosave(){ clearTimeout(autosaveTimer); autosaveTimer=null; if(content.innerHTML!==lastBackedUpHtml) return writeBackup(); return true; }
+  // 디바운스 중 문서를 닫아도 마지막 입력을 보존한다.
+  window.addEventListener('pagehide', function(){ if(autosaveTimer!==null) doAutosave(); });
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='hidden' && autosaveTimer!==null) doAutosave(); });
+
+  /* ---------- 편집 모드 ---------- */
+  function setEdit(on){
+    if(on && !editing){ originalPaddingTop=body.style.paddingTop; originalPaddingPixels=parseFloat(getComputedStyle(body).paddingTop)||0; }
+    editing=on;
+    content.setAttribute('contenteditable', on?'true':'false');
+    body.classList.toggle('doc-editing', on);
+    var t=$('doc-editToggle');
+    if(t){ t.classList.toggle('on', on); t.textContent=on?'✎ 편집 중':'✎ 편집'; }
+    try{ document.execCommand('styleWithCSS',false,true); }catch(e){}
+    // 편집 툴바가 상단 고정이라 본문 상단이 가려지지 않게 스페이서 부여
+    setMore(false);
+    if(on) updateInspector();
+    else { setInspector(false); body.style.paddingTop=originalPaddingTop; doAutosave(); }
+    updateEditorLayout();
+  }
+
+  /* ---------- 좁은 화면의 편집 UI ---------- */
+  function setMore(on){
+    var controls=$('doc-controls'), toggle=$('doc-moreToggle');
+    if(controls) controls.classList.toggle('doc-more-open',on);
+    if(toggle) toggle.setAttribute('aria-expanded',String(on));
+  }
+  function setInspector(on){
+    body.classList.toggle('doc-inspector-open',on && editing);
+    var toggle=$('doc-inspectorToggle'); if(toggle) toggle.setAttribute('aria-expanded',String(on && editing));
+  }
+  function updateEditorLayout(){
+    var mobile=window.matchMedia('(max-width:900px)').matches;
+    var controls=$('doc-controls'), bar=$('doc-editbar');
+    var controlHeight=controls?controls.offsetHeight:60;
+    body.style.setProperty('--doc-ed-controls-height',controlHeight+'px');
+    body.style.setProperty('--doc-ed-controls-width',(controls?controls.offsetWidth:380)+'px');
+    var bottom=editing?((mobile?controlHeight:0)+(bar?bar.offsetHeight:0)):(mobile?controlHeight:0);
+    body.style.setProperty('--doc-ed-tools-bottom',bottom+'px');
+    body.style.setProperty('--doc-ed-visible-height',(window.visualViewport?window.visualViewport.height:window.innerHeight)+'px');
+    if(editing) body.style.paddingTop=(originalPaddingPixels+bottom)+'px';
+    if(!mobile){setMore(false);setInspector(false);}
+  }
+  function scheduleLayout(){
+    if(layoutFrame!==null) return;
+    layoutFrame=requestAnimationFrame(function(){layoutFrame=null;updateEditorLayout();});
+  }
+  bind('doc-moreToggle','click',function(){
+    setInspector(false); setMore(this.getAttribute('aria-expanded')!=='true');
+  });
+  bind('doc-inspectorToggle','click',function(){
+    setMore(false);setInspector(this.getAttribute('aria-expanded')!=='true');
+  });
+  bind('doc-inspectorClose','click',function(){setInspector(false);var t=$('doc-inspectorToggle');if(t)t.focus();});
+  document.addEventListener('pointerdown',function(e){
+    var controls=$('doc-controls');if(controls && !controls.contains(e.target))setMore(false);
+    if(content.contains(e.target))setInspector(false);
+  });
+  var moreActions=$('doc-more-actions');if(moreActions)moreActions.addEventListener('click',function(e){if(e.target.closest('button'))setMore(false);});
+
+  /* ---------- 선택 / 명령 ---------- */
+  function focusContent(){ content.focus({preventScroll:true}); if(savedRange){ var s=window.getSelection(); s.removeAllRanges(); s.addRange(savedRange); } }
+  function styleCss(){ try{ document.execCommand('styleWithCSS',false,true); }catch(e){} }
+  function afterEdit(){ updateInspector(); scheduleAutosave(); }
+  function exec(name,val){ if(!editing) return; focusContent(); styleCss(); document.execCommand(name,false,val); afterEdit(); }
+  function applyFontSize(px){
+    if(!editing) return; focusContent();
+    try{ document.execCommand('styleWithCSS',false,false); }catch(e){}
+    document.execCommand('fontSize',false,'7');
+    try{ document.execCommand('styleWithCSS',false,true); }catch(e){}
+    var f=content.querySelectorAll('font[size="7"]');
+    for(var i=0;i<f.length;i++){ f[i].removeAttribute('size'); f[i].style.fontSize=px+'px'; }
+    afterEdit();
+  }
+  function applyBack(c){ if(!editing) return; focusContent(); styleCss(); if(!document.execCommand('hiliteColor',false,c)){ document.execCommand('backColor',false,c); } afterEdit(); }
+  function insertTable(){
+    if(!editing) return; focusContent();
+    var h='<div class="doc-ed-tablewrap"><table class="doc-ed-table"><thead><tr><th>항목</th><th>항목</th><th>항목</th></tr></thead><tbody>'+
+      '<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr></tbody></table></div><p>&nbsp;</p>';
+    document.execCommand('insertHTML',false,h); afterEdit();
+  }
+
+  document.addEventListener('selectionchange', function(){
+    var s=window.getSelection();
+    if(s && s.rangeCount){ var r=s.getRangeAt(0); if(content.contains(r.commonAncestorContainer)){ savedRange=r.cloneRange(); updateInspector(); } }
+  });
+
+  /* ---------- 속성 패널 ---------- */
+  function rgbToHex(c){ var m=(c||'').match(/\d+(\.\d+)?/g); if(!m) return ''; return '#'+[m[0],m[1],m[2]].map(function(n){return (+n).toString(16).padStart(2,'0');}).join('').toUpperCase(); }
+  function firstFont(s){ return ((s||'').split(',')[0]||'').trim().replace(/^['"]|['"]$/g,''); }
+  function curEl(){ var n=savedRange?savedRange.startContainer:(window.getSelection().anchorNode); if(!n) return content; if(n.nodeType===3) n=n.parentElement; if(!n||!content.contains(n)) return content; return n; }
+  function q(c){ try{ return document.queryCommandState(c); }catch(e){ return false; } }
+  function blockLabel(el){ var n=el, map={H1:'제목 1',H2:'제목 2',H3:'제목 3',H4:'제목 4',BLOCKQUOTE:'인용',P:'본문',LI:'목록',TD:'표 칸',TH:'표 머리글'}; while(n&&n!==content){ if(map[n.tagName]) return map[n.tagName]; n=n.parentElement; } return '본문'; }
+  function optHas(sel,v){ if(!sel) return false; for(var i=0;i<sel.options.length;i++){ if(sel.options[i].value===v) return true; } return false; }
+  function setText(id,v){ var el=$(id); if(el) el.textContent=v; }
+  function updateInspector(){
+    if(!editing) return;
+    var el=curEl(); if(!el) return; var cs=getComputedStyle(el);
+    setText('doc-i-size', Math.round(parseFloat(cs.fontSize))+'px');
+    setText('doc-i-font', firstFont(cs.fontFamily)||'기본');
+    var fsw=$('doc-i-fore-sw'); if(fsw) fsw.style.background=cs.color;
+    setText('doc-i-fore-tx', rgbToHex(cs.color)||'-');
+    var bg=cs.backgroundColor, sw=$('doc-i-back-sw'), tx=$('doc-i-back-tx');
+    if(sw&&tx){ if(!bg||bg==='transparent'||bg==='rgba(0, 0, 0, 0)'){ sw.style.background=''; tx.textContent='없음'; } else { sw.style.background=bg; tx.textContent=rgbToHex(bg); } }
+    var chips=document.querySelectorAll('#doc-i-chips .doc-ed-ichip'); for(var i=0;i<chips.length;i++){ chips[i].classList.toggle('on', q(chips[i].getAttribute('data-st'))); }
+    setText('doc-i-block', blockLabel(el));
+    // 툴바 동기화
+    var tag='P', n=el; while(n&&n!==content){ if(/^(H1|H2|H3|P|BLOCKQUOTE)$/.test(n.tagName)){ tag=n.tagName; break; } n=n.parentElement; }
+    var bsel=$('doc-ebBlock'); if(bsel) bsel.value=tag.toLowerCase();
+    var px=String(Math.round(parseFloat(cs.fontSize))), ss=$('doc-ebSize'); if(ss) ss.value=optHas(ss,px)?px:'';
+    var col=$('doc-ebColor'); if(col) col.value=rgbToHex(cs.color)||'#1f2937';
+    ['bold','italic','underline','strikeThrough'].forEach(function(cmd){
+      var b=document.querySelector('#doc-editbar [data-cmd="'+cmd+'"]'); if(b) b.classList.toggle('active',q(cmd));
+    });
+  }
+
+  /* ---------- 툴바 연결 ---------- */
+  var editbar=$('doc-editbar');
+  if(editbar){
+    editbar.addEventListener('mousedown', function(e){ if(e.target.closest('button')) e.preventDefault(); });
+    editbar.querySelectorAll('[data-cmd]').forEach(function(b){ b.addEventListener('click', function(){ exec(b.getAttribute('data-cmd')); }); });
+  }
+  bind('doc-ebBlock','change', function(){ exec('formatBlock','<'+this.value+'>'); });
+  bind('doc-ebFont','change', function(){ if(this.value) exec('fontName', this.value); });
+  bind('doc-ebSize','change', function(){ if(this.value) applyFontSize(this.value); });
+  bind('doc-ebColor','input', function(){ exec('foreColor', this.value); });
+  bind('doc-ebBg','input', function(){ applyBack(this.value); });
+  bind('doc-ebBgClear','click', function(){ applyBack('transparent'); });
+  bind('doc-ebTable','click', insertTable);
+  content.addEventListener('input', function(){ if(editing) scheduleAutosave(); });
+  function bind(id,ev,fn){ var el=$(id); if(el) el.addEventListener(ev,fn); }
+
+  /* ---------- 직렬화 / 저장 ---------- */
+  function snapshotTitle(html){ var d=document.createElement('div'); d.innerHTML=html; var h=d.querySelector('h1,h2,h3'); return (h&&h.textContent.trim())||(document.title||'').trim()||'(제목 없음)'; }
+  function pushHistoryIfChanged(){ var cur=content.innerHTML; if(cur!==lastSavedHtml){ history.unshift({ts:new Date().toISOString(), title:snapshotTitle(lastSavedHtml), html:lastSavedHtml}); history=history.slice(0,30); } }
+  function serialize(){
+    histEl.textContent=escForScript(JSON.stringify(history));
+    var clone=document.documentElement.cloneNode(true);
+    clone.querySelectorAll('[data-doc-editor-download]').forEach(function(el){el.remove();});
+    var b=clone.querySelector('body'); if(b){ b.classList.remove('doc-editing','doc-inspector-open'); b.style.paddingTop=originalPaddingTop; ['--doc-ed-controls-height','--doc-ed-controls-width','--doc-ed-tools-bottom','--doc-ed-visible-height'].forEach(function(name){b.style.removeProperty(name);}); }
+    var c=clone.querySelector('#doc-content'); if(c) c.setAttribute('contenteditable','false');
+    ['#doc-restore-banner','#doc-toast'].forEach(function(s){ var el=clone.querySelector(s); if(el) el.classList.remove('show'); });
+    var m=clone.querySelector('#doc-history-modal'); if(m) m.classList.remove('open');
+    var hl=clone.querySelector('#doc-hist-list'); if(hl) hl.innerHTML='';
+    var hp=clone.querySelector('#doc-hist-preview'); if(hp) hp.innerHTML='';
+    var controls=clone.querySelector('#doc-controls');if(controls)controls.classList.remove('doc-more-open');
+    ['#doc-moreToggle','#doc-inspectorToggle'].forEach(function(sel){var t=clone.querySelector(sel);if(t)t.setAttribute('aria-expanded','false');});
+    var et=clone.querySelector('#doc-editToggle'); if(et){ et.classList.remove('on'); et.textContent='✎ 편집'; }
+    var attach=clone.querySelector('#doc-attachBtn');if(attach)attach.disabled=false;
+    return '<!DOCTYPE html>\n'+clone.outerHTML;
+  }
+  function suggestName(){ var t=snapshotTitle(content.innerHTML).replace(/[\\/:*?"<>|]/g,'').trim(); return (t||'문서')+'.html'; }
+  function downloadHtml(html, filename){ var blob=new Blob([html],{type:'text/html;charset=utf-8'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename||suggestName(); a.setAttribute('data-doc-editor-download',''); document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },1200); }
+
+  /* ---------- 배포용 HTML (원본 상태를 바꾸지 않는 별도 사본) ---------- */
+  function serializeReadOnly(){
+    var clone=document.documentElement.cloneNode(true);
+    var editorStyle=clone.querySelector('#doc-editor-style');
+    var editorScript=clone.querySelector('#doc-editor-script');
+    if(!editorStyle || !editorScript) throw new Error('편집 엔진의 style/script ID가 없습니다. 크롬과 엔진을 함께 업데이트하세요.');
+    // 편집기로 삽입한 표의 보기 스타일만 남긴다. 툴바/패널 스타일은 내보내지 않는다.
+    if(content.querySelector('.doc-ed-tablewrap,table.doc-ed-table')){
+      var rules=Array.prototype.filter.call($('doc-editor-style').sheet.cssRules,function(rule){
+        return rule.selectorText && rule.selectorText.split(',').every(function(selector){
+          selector=selector.trim(); return selector==='.doc-ed-tablewrap' || selector.indexOf('#doc-content table.doc-ed-table')===0;
+        });
+      });
+      if(rules.length){var tableStyle=document.createElement('style');tableStyle.textContent=rules.map(function(rule){return rule.cssText;}).join('\n');editorStyle.before(tableStyle);}
+    }
+    ['#doc-controls','#doc-editbar','#doc-inspector','#doc-editflag','#doc-restore-banner',
+     '#doc-history-modal','#doc-toast','#doc-history','#doc-editor-style','#doc-editor-script',
+     '[data-doc-editor-download]'].forEach(function(selector){clone.querySelectorAll(selector).forEach(function(el){el.remove();});});
+    var b=clone.querySelector('body');
+    if(b){
+      b.classList.remove('doc-editing','doc-inspector-open');b.removeAttribute('data-doc-id');b.style.paddingTop=originalPaddingTop;
+      ['--doc-ed-controls-height','--doc-ed-controls-width','--doc-ed-tools-bottom','--doc-ed-visible-height'].forEach(function(name){b.style.removeProperty(name);});
+    }
+    var c=clone.querySelector('#doc-content');if(c)c.removeAttribute('contenteditable');
+    var comments=[],walker=document.createTreeWalker(clone,NodeFilter.SHOW_COMMENT),node;
+    while((node=walker.nextNode()))if(/doc-editor/.test(node.data) && !(c&&c.contains(node)))comments.push(node);
+    comments.forEach(function(comment){comment.remove();});
+    return '<!DOCTYPE html>\n'+clone.outerHTML;
+  }
+  function exportReadOnly(){
+    try{
+      downloadHtml(serializeReadOnly(),suggestName().replace(/\.html$/i,'-배포용.html'));
+      toast('편집기 없는 배포용 HTML 다운로드를 시작했습니다.');
+    }catch(e){toast('배포용 HTML을 만들지 못했습니다. 크롬과 엔진을 함께 업데이트했는지 확인해 주세요.');}
+  }
+
+  /* ---------- 다른 HTML에 편집기 추가 ---------- */
+  function attachToHTML(html){
+    if(!window.DocEditorAttach || !attachBundle)throw new Error('편집기 추가 도구가 없습니다. 최신 예시를 사용해 주세요.');
+    return window.DocEditorAttach.convert(html,attachBundle);
+  }
+  bind('doc-attachBtn','click',function(){var input=$('doc-attachFile');if(input)input.click();});
+  bind('doc-attachFile','change',async function(){
+    var file=this.files && this.files[0];this.value='';if(!file)return;
+    var button=$('doc-attachBtn');if(button)button.disabled=true;
+    try{
+      var source=await window.DocEditorAttach.readFile(file);
+      downloadHtml(attachToHTML(source),window.DocEditorAttach.filename(file.name));
+      toast('편집 가능한 사본 다운로드를 시작했습니다. 내려받은 HTML을 열어 사용하세요.');
+    }catch(e){toast(e.message||'편집기를 추가하지 못했습니다.');}
+    finally{if(button)button.disabled=false;}
+  });
+
+  async function saveToFile(forceNew){
+    if(saving) return;
+    saving=true;
+    var oldId=body.dataset.docId, oldHistory=history.slice(), changedId=false;
+    try{
+      if(editing) setEdit(false);
+      await fileLinkReady;
+      var handle=forceNew?null:fileHandle, pickerFailed=false;
+      if(window.showSaveFilePicker){
+        try{
+          if(forceNew || !handle){ handle=await window.showSaveFilePicker({ suggestedName:suggestName(), types:[{description:'HTML 문서', accept:{'text/html':['.html','.htm']}}] }); }
+          else { var p=await handle.queryPermission({mode:'readwrite'}); if(p!=='granted' && (await handle.requestPermission({mode:'readwrite'}))!=='granted'){ toast('쓰기 권한이 허용되지 않아 저장하지 않았습니다. 다시 저장하거나 다른 이름으로 저장해 주세요.'); return; } }
+        }catch(e){ if(e&&e.name==='AbortError') return; if(handle){ toast('저장 파일의 쓰기 권한을 확인하지 못했습니다. 저장 버튼을 다시 눌러 주세요.'); return; } handle=null; pickerFailed=true; }
+      }
+      // 다른 이름으로 저장할 때만 새 문서 ID를 만든다. 기존 문서의 백업은 보존한다.
+      if(forceNew){ body.dataset.docId=genId(); changedId=true; }
+      var savedHtml=content.innerHTML;
+      pushHistoryIfChanged();
+      var output=serialize(), wroteFile=false;
+      if(handle){
+        try{ var w=await handle.createWritable(); await w.write(output); await w.close(); fileHandle=handle; wroteFile=true; }
+        catch(e){
+          if(e&&e.name==='NotFoundError'){
+            if(!forceNew) fileHandle=null;
+            if(!forceNew && rememberAtThisLocation) await fileLinkStore('delete');
+            updateSaveHint();
+            history=oldHistory;
+            if(changedId){ if(oldId===undefined) delete body.dataset.docId; else body.dataset.docId=oldId; }
+            toast('연결한 파일을 찾지 못했습니다. 저장을 다시 누르면 파일을 선택할 수 있습니다.'); return;
+          }
+          pickerFailed=true;
+        }
+      }
+      if(!wroteFile){ downloadHtml(output); if(forceNew) fileHandle=null; }
+      // 다른 이름으로 저장한 파일은 이 탭에서 계속 사용하지만, 원래 경로의 연결은 덮어쓰지 않는다.
+      if(forceNew) rememberAtThisLocation=false;
+      var remembered=true;
+      if(wroteFile && rememberAtThisLocation) remembered=(await fileLinkStore('put',handle)).ok;
+      updateSaveHint();
+      lastSavedHtml=savedHtml;
+      writeBackup();
+      var banner=$('doc-restore-banner'); if(banner) banner.classList.remove('show');
+      toast(wroteFile?'저장되었습니다 · '+handle.name+(remembered?'':' · 파일 연결을 기억하지 못해 다음에 다시 선택해야 합니다.'):(pickerFailed?'파일 저장 실패. 다운로드를 시작했습니다.':'다운로드를 시작했습니다. 내려받은 파일을 확인해 주세요.'));
+    }catch(e){
+      history=oldHistory;
+      if(changedId){ if(oldId===undefined) delete body.dataset.docId; else body.dataset.docId=oldId; }
+      toast('저장하지 못했습니다. 다시 시도해 주세요.');
+    }finally{ saving=false; }
+  }
+
+  /* ---------- 히스토리 ---------- */
+  function fmtTs(iso){ try{ return new Date(iso).toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; } }
+  function openHistory(){
+    var list=$('doc-hist-list'); if(!list) return; list.innerHTML='';
+    if(!history.length){ list.innerHTML='<p class="doc-ed-muted" style="font-size:13px">저장 히스토리가 없습니다.<br>저장하면 직전 내용이 쌓입니다.</p>'; }
+    history.forEach(function(h,i){ var b=document.createElement('button'); b.className='doc-ed-hist-item'; b.innerHTML='<strong>'+escapeHtml(h.title)+'</strong><span>'+fmtTs(h.ts)+'</span>'; b.onclick=function(){ previewHistory(i); }; list.appendChild(b); });
+    var pv=$('doc-hist-preview'); if(pv) pv.innerHTML='<p class="doc-ed-muted" style="font-size:13px">왼쪽에서 버전을 선택하면 미리보기가 표시됩니다.</p>';
+    var m=$('doc-history-modal'); if(m) m.classList.add('open');
+  }
+  function previewHistory(i){
+    var h=history[i], pv=$('doc-hist-preview'); if(!pv) return; pv.innerHTML='';
+    var bar=document.createElement('div'); bar.className='doc-ed-hist-actions';
+    var btn=document.createElement('button'); btn.className='doc-ed-btn primary'; btn.textContent='이 버전으로 복원'; btn.onclick=function(){ restoreHistory(i); };
+    bar.appendChild(btn); pv.appendChild(bar);
+    var f=document.createElement('div'); f.className='doc-ed-hist-doc'; f.innerHTML=h.html; pv.appendChild(f);
+  }
+  function restoreHistory(i){
+    var target=history[i].html;
+    history.unshift({ts:new Date().toISOString(), title:'복원 전: '+snapshotTitle(content.innerHTML), html:content.innerHTML}); history=history.slice(0,30);
+    content.innerHTML=target; savedRange=null; var m=$('doc-history-modal'); if(m) m.classList.remove('open'); scheduleAutosave();
+    toast('해당 버전으로 복원했습니다. 파일에 반영하려면 [저장]을 누르세요.');
+  }
+
+  /* ---------- 자동저장 복구 ---------- */
+  function checkAutosave(){
+    try{ var raw=localStorage.getItem(autosaveKey()); if(!raw) return; var a=JSON.parse(raw);
+      if(a && typeof a.html==='string' && a.html!==content.innerHTML){
+        var banner=$('doc-restore-banner'); if(!banner) return;
+        var msg=banner.querySelector('.msg'); if(msg) msg.textContent='자동저장본 ('+fmtTs(a.ts)+')이 있습니다. 복구하시겠어요?';
+        banner.classList.add('show');
+        var rb=$('doc-rb-restore'); if(rb) rb.onclick=function(){ content.innerHTML=a.html; savedRange=null; lastBackedUpHtml=a.html; banner.classList.remove('show'); updateInspector(); toast('자동저장본을 복구했습니다. 파일에 반영하려면 저장을 누르세요.'); };
+        var ig=$('doc-rb-ignore'); if(ig) ig.onclick=function(){ banner.classList.remove('show'); };
+        var keep=$('doc-rb-keep-current'); if(keep) keep.onclick=function(){
+          clearTimeout(autosaveTimer); autosaveTimer=null;
+          if(writeBackup()){
+            banner.classList.remove('show');
+            toast('현재 버전으로 백업을 확정했습니다. 이전 복구 알림은 다시 표시되지 않습니다.');
+          }
+        };
+      }
+    }catch(e){}
+  }
+
+  /* ---------- 버튼 / 단축키 ---------- */
+  bind('doc-editToggle','click', function(){ setEdit(!editing); });
+  bind('doc-saveBtn','click', function(){ saveToFile(false); });
+  bind('doc-saveAsBtn','click', function(){ saveToFile(true); });
+  bind('doc-exportBtn','click',exportReadOnly);
+  bind('doc-historyBtn','click', openHistory);
+  bind('doc-hist-close','click', function(){ var m=$('doc-history-modal'); if(m) m.classList.remove('open'); });
+  bind('doc-printBtn','click', function(){ if(editing) setEdit(false); window.print(); });
+  var hm=$('doc-history-modal'); if(hm) hm.addEventListener('mousedown', function(e){ if(e.target===this) this.classList.remove('open'); });
+  document.addEventListener('keydown', function(e){
+    if(e.key==='Escape'){setMore(false);setInspector(false);var m=$('doc-history-modal');if(m)m.classList.remove('open');}
+    if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==='s'||e.key==='S')){ e.preventDefault(); saveToFile(false); }
+    if((e.metaKey||e.ctrlKey)&&(e.key==='e'||e.key==='E')){ e.preventDefault(); setEdit(!editing); }
+  });
+
+  /* ---------- 창 크기 변경 시 상단 스페이서 갱신 (툴바 줄바꿈 대응) ---------- */
+  window.addEventListener('resize',scheduleLayout);
+  if(window.visualViewport)window.visualViewport.addEventListener('resize',scheduleLayout);
+  if(window.ResizeObserver){var layoutObserver=new ResizeObserver(scheduleLayout);['doc-controls','doc-editbar'].forEach(function(id){var el=$(id);if(el)layoutObserver.observe(el);});}
+
+  /* ---------- 초기화 ---------- */
+  try{ document.execCommand('styleWithCSS',false,true); }catch(e){}
+  updateEditorLayout();
+  checkAutosave();
+
+  // 외부에서 쓸 수 있는 최소 API
+  window.DocEditor={
+    toggle:function(){ setEdit(!editing); },
+    edit:function(on){ setEdit(!!on); },
+    save:function(){ return saveToFile(false); },
+    isEditing:function(){ return editing; },
+    getReadOnlyHTML:function(){ return serializeReadOnly(); },
+    attachToHTML:attachToHTML,
+    getHTML:function(){ return serialize(); }   // 편집 흔적 제거된 자체완결 HTML 문자열
+  };
+})();
+
+</script>
+</body>
+</html>
