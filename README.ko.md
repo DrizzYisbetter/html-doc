@@ -2,7 +2,7 @@
 
 AI가 편집 가능한 단독 HTML 문서를 만들도록 돕는 Agent Skills 패키지입니다.
 
-[English](README.md) · [AI용 지침](SKILL.md) · [한국어 상세 가이드](references/guide.ko.md)
+[English](README.en.md) · [AI용 지침](SKILL.md) · [한국어 상세 가이드](references/guide.ko.md)
 
 보고서·안내문·레터를 HTML로 만들고, 브라우저에서 글자와 서식을 고치고 저장할 수 있습니다. 편집기 없는 배포본을 만들거나, 기존 HTML에 편집기를 붙일 수도 있습니다. 완성된 HTML을 사용하는 데 서버·확장 프로그램·AI 계정은 필요하지 않습니다.
 
@@ -36,7 +36,7 @@ HTML 파일을 내려받아 브라우저로 열면 됩니다.
 
 프로젝트 안에서만 사용할 때는 프로젝트의 `.claude/skills/` 또는 `.agents/skills/`에 넣습니다. 최종 경로가 `html-doc/SKILL.md`인지 확인하세요. ZIP에 바깥 폴더가 붙어 있으면 이름을 바꾸거나 내용을 복사합니다. 기존 설치가 있으면 내용을 확인한 뒤 업데이트하세요.
 
-Git clone 설치 명령 예시는 [영문 설치 안내](README.md#install-for-an-ai-agent)에 있습니다. Codex에서는 스킬 설치 도구에 저장소 주소를 전달하는 방법도 있습니다. AI별 지원 기능·권한은 다르며, 이 저장소 자체가 제품별 플러그인 등록을 의미하지는 않습니다.
+Git clone 설치 명령 예시는 [영문 설치 안내](README.en.md#install-for-an-ai-agent)에 있습니다. Codex에서는 스킬 설치 도구에 저장소 주소를 전달하는 방법도 있습니다. AI별 지원 기능·권한은 다르며, 이 저장소 자체가 제품별 플러그인 등록을 의미하지는 않습니다.
 
 ## 주요 기능과 저장 방식
 

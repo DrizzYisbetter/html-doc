@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 subprocess.run([sys.executable, str(ROOT / 'scripts/check-release.py')], check=True)
 version = re.search(r'^  version: "([0-9]+\.[0-9]+\.[0-9]+)"$', (ROOT / 'SKILL.md').read_text(), re.M).group(1)
 output = ROOT.parent / f'html-doc-v{version}.zip'
-root_files = {'SKILL.md', 'README.md', 'README.ko.md', 'LICENSE', 'CHANGELOG.md', '.gitignore'}
+root_files = {'SKILL.md', 'README.md', 'README.ko.md', 'README.en.md', 'LICENSE', 'CHANGELOG.md', '.gitignore'}
 folders = {'assets', 'examples', 'tools', 'tests', 'references', 'scripts'}
 with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
     for path in sorted(ROOT.rglob('*')):
