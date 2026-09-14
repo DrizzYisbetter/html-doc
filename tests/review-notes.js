@@ -254,4 +254,75 @@ check('notes ui: a half-typed reply survives another card changing', await page.
 }));
 await page.evaluate(()=>{ document.getElementById('doc-notesInput').value=''; document.getElementById('doc-notesClose').click(); window.DocEditor.notes.list().forEach(n=>window.DocEditor.notes.remove(n.id)); localStorage.removeItem('docedit:autosave:url:'+location.origin+location.pathname); });
 
+// ---- D. 비교 모드 (API) ----
+await fresh();
+check('compare: session baseline shows unsaved edits and keeps saves clean', await page.evaluate(()=>{
+  const c=document.getElementById('doc-content'); const original=c.innerHTML;
+  c.innerHTML='<h2>제목</h2><p>하나 둘 셋</p><p>지울 문단</p><p style="text-align:left">정렬</p>';
+  window.DocEditor.edit(true); c.dispatchEvent(new Event('input',{bubbles:true})); window.DocEditor.edit(false);
+  // 저장 없이 본문을 다시 바꾼다: 마지막 저장(열었을 때) 기준과 비교해야 하므로 lastSavedHtml은 원본이다.
+  window.__base=original;
+  c.innerHTML='<h2>제목</h2><p>하나 넷 셋</p><p style="text-align:center">정렬</p><p>새 문단</p>'; window.__cur=c.innerHTML;
+  window.DocEditor.compare(true);
+  const s=window.DocEditor.changes();
+  const saved=new DOMParser().parseFromString(window.DocEditor.getHTML(),'text/html').getElementById('doc-content');
+  const ro=new DOMParser().parseFromString(window.DocEditor.getReadOnlyHTML(),'text/html').getElementById('doc-content');
+  return window.DocEditor.isComparing() && document.body.classList.contains('doc-changes') && /마지막 저장 이후/.test(s.baseline) && s.total>0 && c.querySelector('[data-doc-change]')!==null && saved.innerHTML===window.__cur && !saved.querySelector('[data-doc-change],ins.doc-ed-ins,del.doc-ed-del') && ro.innerHTML===window.__cur;
+}));
+check('compare: closing restores the exact body', await page.evaluate(()=>{ window.DocEditor.compare(false); return !window.DocEditor.isComparing() && document.getElementById('doc-content').innerHTML===window.__cur && !document.body.classList.contains('doc-changes'); }));
+check('compare: history baseline against a specific version', await page.evaluate(async()=>{
+  window.showSaveFilePicker=async()=>({name:'t.html',queryPermission:async()=>'granted',createWritable:async()=>({write:async()=>{},close:async()=>{}})});
+  await window.DocEditor.save();                       // history[0] = 열었을 때 본문(author '')
+  window.DocEditor.compareWith('history',0);
+  const s=window.DocEditor.changes();
+  return window.DocEditor.isComparing() && s.total>0 && /이름 없음/.test(s.baseline);
+}));
+check('compare: default baseline prefers a version saved by someone else', await page.evaluate(async()=>{
+  window.DocEditor.compare(false);
+  const c=document.getElementById('doc-content');
+  // 지금 문서는 검토자가 저장했다. 다른 사람이 저장한 항목을 히스토리에 넣고 기본 기준을 확인한다.
+  const d=new DOMParser().parseFromString(window.DocEditor.getHTML(),'text/html');
+  const hist=JSON.parse(d.getElementById('doc-history').textContent);
+  hist.unshift({ts:'2026-09-12T00:00:00.000Z',title:'검토자 중간 저장',html:'<p>검토자 중간</p>',author:'검토자'});
+  hist.forEach(h=>{ h.author='검토자'; });   // 지금까지의 항목은 모두 검토자가 저장한 것으로 둔다
+  hist.push({ts:'2026-09-11T00:00:00.000Z',title:'작성자 버전',html:'<h2>제목</h2><p>작성자가 보낸 문단</p>',author:'작성자'});
+  document.getElementById('doc-history').textContent=JSON.stringify(hist);
+  // 히스토리는 로드 시 읽으므로, 같은 본문·출처로 새 프레임에서 확인한다.
+  let src=window.DocEditor.getHTML().replace('id="doc-history">'+d.getElementById('doc-history').textContent.replace(/</g,'\\u003c'),'id="doc-history">'+JSON.stringify(hist).replace(/</g,'\\u003c'));
+  const f=document.createElement('iframe'); f.srcdoc=src; document.body.appendChild(f); await new Promise(r=>f.onload=r);
+  const w=f.contentWindow; w.DocEditor.compare(true); const s=w.DocEditor.changes(); f.remove();
+  return /작성자 · /.test(s.baseline) && s.total>0;
+}));
+check('compare: revert each change type through the API', await page.evaluate(()=>{
+  const c=document.getElementById('doc-content'); const base='<p>하나 둘 셋</p><p>지울 문단</p><p style="text-align:left">정렬</p>';
+  const cur='<p>하나 넷 셋</p><p style="text-align:center">정렬</p><p>새 문단</p>';
+  // history[0]를 base로 만들기 위해 프레임을 쓴다.
+  return (async()=>{
+    let src=await (await fetch('/assets/skeleton.html')).text();
+    src=src.replace('id="doc-history">[]','id="doc-history">[{"ts":"2026-09-11T00:00:00.000Z","title":"기준","html":"'+base.replace(/"/g,'\\"').replace(/</g,'\\u003c')+'","author":"작성자"}]');
+    const f=document.createElement('iframe'); f.srcdoc=src; document.body.appendChild(f); await new Promise(r=>f.onload=r);
+    const w=f.contentWindow, d=w.document, cc=d.getElementById('doc-content'); cc.innerHTML=cur;
+    w.DocEditor.compareWith('history',0);
+    const before=w.DocEditor.changes(); // mod, del, fmt, ins = 4
+    const order=[...cc.querySelectorAll('[data-doc-change]')].map(el=>el.className.match(/doc-ed-diff-(ins|del|mod|fmt)/)[1]);
+    w.DocEditor.revertChange(0); const afterMod=w.DocEditor.changes();
+    w.DocEditor.revertChange(0); w.DocEditor.revertChange(0); w.DocEditor.revertChange(0);
+    const none=w.DocEditor.changes();
+    w.DocEditor.compare(false); const body=cc.innerHTML; f.remove();
+    return before.total===4 && order.join(',')==='mod,del,fmt,ins' && afterMod.total===3 && none.total===0 && body===base;
+  })();
+}));
+check('compare: entering edit mode closes the comparison', await page.evaluate(()=>{ window.DocEditor.compare(true); const on=window.DocEditor.isComparing(); window.DocEditor.edit(true); const off=!window.DocEditor.isComparing() && !document.querySelector('#doc-content [data-doc-change]'); window.DocEditor.edit(false); return on && off; }));
+check('compare: notes cannot be added while comparing but replies work', await page.evaluate(()=>{
+  const c=document.getElementById('doc-content'), t=c.querySelector('p').firstChild, r=document.createRange(); r.setStart(t,0); r.setEnd(t,2);
+  const id=window.DocEditor.notes.add('비교 전 메모',{range:r});
+  window.DocEditor.compare(true);
+  const blocked=window.DocEditor.notes.add('비교 중 메모')===null;
+  const kept=!!c.querySelector('mark[data-doc-note="'+id+'"]');
+  const replied=window.DocEditor.notes.reply(id,'비교 중 답글');
+  window.DocEditor.compare(false);
+  return blocked && kept && replied && window.DocEditor.notes.list()[0].replies.length===1 && !!c.querySelector('mark[data-doc-note="'+id+'"]');
+}));
+await page.evaluate(()=>{ window.DocEditor.notes.list().forEach(n=>window.DocEditor.notes.remove(n.id)); Object.keys(localStorage).filter(k=>k.startsWith('docedit:autosave:')).forEach(k=>localStorage.removeItem(k)); });
+
 console.log(JSON.stringify({pass:true,count:results.length,results}));

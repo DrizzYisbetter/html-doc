@@ -1183,13 +1183,12 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     return card;
   }
   function renderNotes(){
-    var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'), list=$('doc-notesList'), chk=$('doc-notesShowResolved'), showResolved=!!(chk&&chk.checked), shown=[], i, keep={}, draft=null, card, box, ta, state;
+    var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'), list=$('doc-notesList'), chk=$('doc-notesShowResolved'), showResolved=!!(chk&&chk.checked), shown=[], i, keep=Object.create(null), drafts=Object.create(null), card, box, ta, state;
     if(count) count.textContent=open?String(open):''; if(btn) btn.title=open?('미해결 메모 '+open+'개'):'메모 보기·남기기';
     showTarget();
     if(!list) return;
-    // 다시 그리기 전에 쓰다 만 답글과 카드의 펼침·선택 상태를 보존한다.
-    box=list.querySelector('.doc-ed-note-replybox:not([hidden])');
-    if(box){ card=box.closest('.doc-ed-note-card'); ta=box.querySelector('textarea'); draft={id:card?card.getAttribute('data-note-id'):'',text:ta?ta.value:''}; }
+    // 다시 그리기 전에 쓰다 만 답글(열린 상자 전부)과 카드의 펼침·선택 상태를 보존한다.
+    list.querySelectorAll('.doc-ed-note-replybox:not([hidden])').forEach(function(b){ var c=b.closest('.doc-ed-note-card'), t=b.querySelector('textarea'); if(c) drafts[c.getAttribute('data-note-id')]=t?t.value:''; });
     list.querySelectorAll('.doc-ed-note-card.open,.doc-ed-note-card.active').forEach(function(c){ keep[c.getAttribute('data-note-id')]=(c.classList.contains('open')?'o':'')+(c.classList.contains('active')?'a':''); });
     list.innerHTML='';
     for(i=0;i<notes.length;i++) if(showResolved||!notes[i].resolved) shown.push(notes[i]);
@@ -1197,7 +1196,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     for(i=0;i<shown.length;i++){
       card=noteCard(shown[i]); state=keep[shown[i].id]||'';
       if(state.indexOf('o')>=0) card.classList.add('open'); if(state.indexOf('a')>=0) card.classList.add('active');
-      if(draft&&draft.id===shown[i].id){ box=card.querySelector('.doc-ed-note-replybox'); box.hidden=false; box.querySelector('textarea').value=draft.text; }
+      if(shown[i].id in drafts){ box=card.querySelector('.doc-ed-note-replybox'); box.hidden=false; box.querySelector('textarea').value=drafts[shown[i].id]; }
       list.appendChild(card);
     }
   }
@@ -1225,19 +1224,108 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   })();
   content.addEventListener('click',function(e){ var m=e.target.closest?e.target.closest('mark.doc-ed-note'):null; if(m && content.contains(m)){ setNotes(true); highlightCard(m.getAttribute('data-doc-note')); } });
 
+  /* ---------- 변경 사항 비교 (보기 전용 · 원본은 pristineHtml 문자열) ---------- */
+  var cmp=null, baseline=null, changeIndex=-1, fileBaseline=null;
+  function withPristine(fn){ if(!comparing) return fn(); var rendered=content.innerHTML; content.innerHTML=pristineHtml; try{ return fn(); } finally{ content.innerHTML=rendered; } }
+  function baselineCandidates(){
+    var list=[], cur=getContentHtml();
+    if(cur!==lastSavedHtml) list.push({kind:'session',label:'마지막 저장 이후 (미저장 수정)',html:lastSavedHtml});
+    history.forEach(function(h,i){ list.push({kind:'history',index:i,label:(h.author||'이름 없음')+' · '+fmtTs(h.ts)+' · '+h.title,html:h.html}); });
+    if(fileBaseline) list.push(fileBaseline);
+    return list;
+  }
+  // 기본 기준: 미저장 수정이 있으면 마지막 저장, 아니면 현재 저장자와 다른 사람이 저장한 가장 최근 저장본, 없으면 최근 저장본.
+  function pickDefaultBaseline(){
+    var c=baselineCandidates(), me=body.dataset.docSavedBy||'', i, k;
+    if(!c.length) return null;
+    if(c[0].kind==='session') return c[0];
+    for(i=0;i<history.length;i++) if((history[i].author||'')!==me){ for(k=0;k<c.length;k++) if(c[k].kind==='history'&&c[k].index===i) return c[k]; }
+    for(k=0;k<c.length;k++) if(c[k].kind==='history'&&c[k].index===0) return c[k];
+    return null;
+  }
+  function changeElements(){ return content.querySelectorAll('[data-doc-change]'); }
+  function changeTotal(){ return cmp?cmp.changes.length:0; }
+  function updateChangeButtons(){
+    var total=changeTotal(), prev=$('doc-changesPrev'), next=$('doc-changesNext'), rv=$('doc-changesRevert');
+    if(prev) prev.disabled=total===0; if(next) next.disabled=total===0; if(rv) rv.disabled=changeIndex<0||changeIndex>=total;
+  }
+  function selectChange(i,scroll){
+    var els=changeElements(), k, target=null;
+    for(k=0;k<els.length;k++) els[k].classList.remove('doc-ed-diff-active');
+    changeIndex=(cmp&&i>=0&&i<cmp.changes.length)?i:-1;
+    if(changeIndex>=0){ for(k=0;k<els.length;k++) if(els[k].getAttribute('data-doc-change')===String(changeIndex)){ els[k].classList.add('doc-ed-diff-active'); if(!target) target=els[k]; } }
+    if(target&&scroll) target.scrollIntoView({block:'center',behavior:'smooth'});
+    updateChangeButtons();
+  }
+  function stepChange(dir){ var total=changeTotal(); if(!total) return; selectChange(((changeIndex<0?(dir>0?-1:0):changeIndex)+dir+total)%total,true); }
+  function renderCompare(){
+    var summary=$('doc-changesSummary'), n, total;
+    if(!baseline){ content.innerHTML=pristineHtml; cmp=null; changeIndex=-1; if(summary) summary.textContent='비교할 저장본이 없습니다. 파일을 선택해 비교할 수 있습니다.'; updateChangeButtons(); reconcileNotes(); return; }
+    cmp=window.DocEditorDiff.compare(baseline.html,pristineHtml);
+    window.DocEditorDiff.render(cmp);
+    content.innerHTML=cmp.cRoot.innerHTML;
+    n=cmp.counts; total=cmp.changes.length;
+    if(summary) summary.textContent=total?('추가 '+n.ins+' · 삭제 '+n.del+' · 수정 '+n.mod+' · 서식 '+n.fmt+(cmp.exceeded?' · 변경이 많아 전체 교체로 표시':'')):'차이 없음';
+    if(changeIndex>=total) changeIndex=total-1;
+    selectChange(changeIndex,false);
+    reconcileNotes();
+  }
+  function baselineValue(b){ return b.kind==='history'?('history:'+b.index):b.kind; }
+  function useBaseline(b){ baseline=b; var sel=$('doc-changesBase'); if(sel&&b) sel.value=baselineValue(b); renderCompare(); }
+  function setCompare(on){
+    if(on){
+      if(comparing) return;
+      if(!window.DocEditorDiff){ toast('비교 엔진이 없습니다. 크롬과 엔진을 함께 업데이트하세요.'); return; }
+      if(editing) setEdit(false);
+      captureBasePadding();
+      pristineHtml=content.innerHTML; comparing=true; changeIndex=-1; body.classList.add('doc-changes');
+      baseline=pickDefaultBaseline(); fillBaseOptions(); renderCompare();
+    }else{
+      if(!comparing) return;
+      content.innerHTML=pristineHtml; comparing=false; pristineHtml=null; cmp=null; changeIndex=-1; baseline=null; body.classList.remove('doc-changes');
+      reconcileNotes(); savedRange=null; if(!editing) restoreBasePadding();
+    }
+    var b=$('doc-changesBtn'); if(b) b.classList.toggle('on',on);
+    showTarget(); updateEditorLayout();
+  }
+  function fillBaseOptions(){
+    var sel=$('doc-changesBase'), c, i, o; if(!sel) return; sel.innerHTML='';
+    c=baselineCandidates();
+    for(i=0;i<c.length;i++){ o=document.createElement('option'); o.value=baselineValue(c[i]); o.textContent=c[i].label; sel.appendChild(o); }
+    o=document.createElement('option'); o.value='pick'; o.textContent=fileBaseline?'다른 파일 선택…':'파일 선택…'; sel.appendChild(o);
+    sel.value=baseline?baselineValue(baseline):'pick';
+  }
+  function revertChange(i){
+    if(!comparing||!cmp) return false;
+    if(typeof i==='number') changeIndex=i;
+    if(changeIndex<0||changeIndex>=cmp.changes.length) return false;
+    var model=document.createElement('div'); model.innerHTML=pristineHtml;
+    if(!window.DocEditorDiff.revert(cmp,changeIndex,model)){ toast('되돌리지 못했습니다.'); return false; }
+    pristineHtml=model.innerHTML; renderCompare(); scheduleAutosave();
+    toast('원래대로 되돌렸습니다. 파일에 반영하려면 저장을 누르세요.');
+    return true;
+  }
+  async function loadBaselineFile(file){
+    var html=await window.DocEditorAttach.readFile(file), doc=new DOMParser().parseFromString(html,'text/html'), root=doc.getElementById('doc-content')||doc.body;
+    fileBaseline={kind:'file',label:'파일: '+file.name,html:root?root.innerHTML:''};
+    fillBaseOptions(); useBaseline(fileBaseline);
+  }
+
   /* ---------- 편집 모드 ---------- */
+  function captureBasePadding(){ if(!editing && !comparing){ originalPaddingTop=body.style.paddingTop; originalPaddingPixels=parseFloat(getComputedStyle(body).paddingTop)||0; } }
+  function restoreBasePadding(){ body.style.paddingTop=originalPaddingTop; }
   function setEdit(on){
-    if(on && !editing){ originalPaddingTop=body.style.paddingTop; originalPaddingPixels=parseFloat(getComputedStyle(body).paddingTop)||0; }
+    if(on && comparing) setCompare(false);
+    if(on && !editing) captureBasePadding();
     editing=on;
     content.setAttribute('contenteditable', on?'true':'false');
     body.classList.toggle('doc-editing', on);
     var t=$('doc-editToggle');
     if(t){ t.classList.toggle('on', on); t.textContent=on?'✎ 편집 중':'✎ 편집'; }
     try{ document.execCommand('styleWithCSS',false,true); }catch(e){}
-    // 편집 툴바가 상단 고정이라 본문 상단이 가려지지 않게 스페이서 부여
     setMore(false);
     if(on) updateInspector();
-    else { setInspector(false); body.style.paddingTop=originalPaddingTop; doAutosave(); }
+    else { setInspector(false); if(!comparing) restoreBasePadding(); doAutosave(); }
     updateEditorLayout();
   }
 
@@ -1253,14 +1341,15 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   }
   function updateEditorLayout(){
     var mobile=window.matchMedia('(max-width:900px)').matches;
-    var controls=$('doc-controls'), bar=$('doc-editbar');
+    var controls=$('doc-controls'), bar=$('doc-editbar'), cbar=$('doc-changes-bar');
     var controlHeight=controls?controls.offsetHeight:60;
     body.style.setProperty('--doc-ed-controls-height',controlHeight+'px');
     body.style.setProperty('--doc-ed-controls-width',(controls?controls.offsetWidth:380)+'px');
-    var bottom=editing?((mobile?controlHeight:0)+(bar?bar.offsetHeight:0)):(mobile?controlHeight:0);
+    var toolsHeight=editing?(bar?bar.offsetHeight:0):(comparing?(cbar?cbar.offsetHeight:0):0);
+    var bottom=(mobile?controlHeight:0)+toolsHeight;
     body.style.setProperty('--doc-ed-tools-bottom',bottom+'px');
     body.style.setProperty('--doc-ed-visible-height',(window.visualViewport?window.visualViewport.height:window.innerHeight)+'px');
-    if(editing) body.style.paddingTop=(originalPaddingPixels+bottom)+'px';
+    if(editing||comparing) body.style.paddingTop=(originalPaddingPixels+bottom)+'px';
     if(!mobile){setMore(false);setInspector(false);}
   }
   function scheduleLayout(){
@@ -1359,7 +1448,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   function serialize(){
     histEl.textContent=escForScript(JSON.stringify(history));
     notesEl.textContent=escForScript(JSON.stringify(notes));
-    var clone=document.documentElement.cloneNode(true);
+    var clone=withPristine(function(){ return document.documentElement.cloneNode(true); });
     clone.querySelectorAll('[data-doc-editor-download]').forEach(function(el){el.remove();});
     var b=clone.querySelector('body'); if(b){ b.classList.remove('doc-editing','doc-inspector-open','doc-notes-open','doc-changes'); b.style.paddingTop=originalPaddingTop; ['--doc-ed-controls-height','--doc-ed-controls-width','--doc-ed-tools-bottom','--doc-ed-visible-height'].forEach(function(name){b.style.removeProperty(name);}); }
     var c=clone.querySelector('#doc-content'); if(c) c.setAttribute('contenteditable','false');
@@ -1387,12 +1476,12 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
 
   /* ---------- 배포용 HTML (원본 상태를 바꾸지 않는 별도 사본) ---------- */
   function serializeReadOnly(){
-    var clone=document.documentElement.cloneNode(true);
+    var clone=withPristine(function(){ return document.documentElement.cloneNode(true); });
     var editorStyle=clone.querySelector('#doc-editor-style');
     var editorScript=clone.querySelector('#doc-editor-script');
     if(!editorStyle || !editorScript) throw new Error('편집 엔진의 style/script ID가 없습니다. 크롬과 엔진을 함께 업데이트하세요.');
     // 편집기로 삽입한 표의 보기 스타일만 남긴다. 툴바/패널 스타일은 내보내지 않는다.
-    if(content.querySelector('.doc-ed-tablewrap,table.doc-ed-table')){
+    if(/doc-ed-tablewrap|doc-ed-table/.test(getContentHtml())){
       var rules=Array.prototype.filter.call($('doc-editor-style').sheet.cssRules,function(rule){
         return rule.selectorText && rule.selectorText.split(',').every(function(selector){
           selector=selector.trim(); return selector==='.doc-ed-tablewrap' || selector.indexOf('#doc-content table.doc-ed-table')===0;
@@ -1514,6 +1603,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     var f=document.createElement('div'); f.className='doc-ed-hist-doc'; f.innerHTML=h.html; pv.appendChild(f);
   }
   function restoreHistory(i){
+    if(comparing) setCompare(false);
     var target=history[i].html, cur=getContentHtml();
     if(!(history[0] && history[0].html===cur)){ history.unshift({ts:body.dataset.docSavedAt||new Date().toISOString(), title:'복원 전: '+snapshotTitle(cur), html:cur, author:body.dataset.docSavedBy||''}); history=history.slice(0,30); }
     content.innerHTML=target; savedRange=null; var m=$('doc-history-modal'); if(m) m.classList.remove('open'); afterContentReplaced(); scheduleAutosave();
@@ -1537,6 +1627,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
         : label+'이 있습니다. 복구하시겠어요?';
       banner.classList.add('show');
       var rb=$('doc-rb-restore'); if(rb) rb.onclick=function(){
+        if(comparing) setCompare(false);
         var cur=content.innerHTML;
         if(!(history[0] && history[0].html===cur)){ history.unshift({ts:fileAt||new Date().toISOString(), title:'복구 전: '+snapshotTitle(cur), html:cur, author:fileBy}); history=history.slice(0,30); }
         content.innerHTML=a.html; if(Array.isArray(a.notes)) notes=sanitizeNotes(a.notes);
@@ -1559,9 +1650,24 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   bind('doc-historyBtn','click', openHistory);
   bind('doc-hist-close','click', function(){ var m=$('doc-history-modal'); if(m) m.classList.remove('open'); });
   bind('doc-printBtn','click', function(){ if(editing) setEdit(false); window.print(); });
+  bind('doc-changesBtn','click',function(){ setCompare(!comparing); });
+  bind('doc-changesClose','click',function(){ setCompare(false); });
+  bind('doc-changesPrev','click',function(){ stepChange(-1); });
+  bind('doc-changesNext','click',function(){ stepChange(1); });
+  bind('doc-changesRevert','click',function(){ revertChange(); });
+  bind('doc-changesBase','change',function(){
+    var v=this.value, c=baselineCandidates(), i;
+    if(v==='pick'){ var input=$('doc-changesFile'); this.value=baseline?baselineValue(baseline):'pick'; if(input) input.click(); return; }
+    for(i=0;i<c.length;i++){ if(baselineValue(c[i])===v){ useBaseline(c[i]); return; } }
+  });
+  bind('doc-changesFile','change',async function(){
+    var file=this.files&&this.files[0]; this.value=''; if(!file) return;
+    try{ await loadBaselineFile(file); toast('파일과 비교합니다: '+file.name); }catch(e){ toast(e.message||'파일을 읽지 못했습니다.'); }
+  });
+  content.addEventListener('click',function(e){ if(!comparing) return; var el=e.target.closest?e.target.closest('[data-doc-change]'):null; if(el && content.contains(el)) selectChange(+el.getAttribute('data-doc-change'),false); });
   var hm=$('doc-history-modal'); if(hm) hm.addEventListener('mousedown', function(e){ if(e.target===this) this.classList.remove('open'); });
   document.addEventListener('keydown', function(e){
-    if(e.key==='Escape'){setMore(false);setInspector(false);setNotes(false);var m=$('doc-history-modal');if(m)m.classList.remove('open');}
+    if(e.key==='Escape'){setMore(false);setInspector(false);setNotes(false);setCompare(false);var m=$('doc-history-modal');if(m)m.classList.remove('open');}
     if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==='s'||e.key==='S')){ e.preventDefault(); saveToFile(false); }
     if((e.metaKey||e.ctrlKey)&&(e.key==='e'||e.key==='E')){ e.preventDefault(); setEdit(!editing); }
   });
@@ -1569,7 +1675,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   /* ---------- 창 크기 변경 시 상단 스페이서 갱신 (툴바 줄바꿈 대응) ---------- */
   window.addEventListener('resize',scheduleLayout);
   if(window.visualViewport)window.visualViewport.addEventListener('resize',scheduleLayout);
-  if(window.ResizeObserver){var layoutObserver=new ResizeObserver(scheduleLayout);['doc-controls','doc-editbar'].forEach(function(id){var el=$(id);if(el)layoutObserver.observe(el);});}
+  if(window.ResizeObserver){var layoutObserver=new ResizeObserver(scheduleLayout);['doc-controls','doc-editbar','doc-changes-bar'].forEach(function(id){var el=$(id);if(el)layoutObserver.observe(el);});}
 
   /* ---------- 초기화 ---------- */
   try{ document.execCommand('styleWithCSS',false,true); }catch(e){}
@@ -1589,6 +1695,11 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     getReadOnlyHTML:function(){ return serializeReadOnly(); },
     attachToHTML:attachToHTML,
     getHTML:function(){ return serialize(); },   // 편집 흔적 제거된 자체완결 HTML 문자열
+    compare:function(on){ setCompare(on!==false); },
+    isComparing:function(){ return comparing; },
+    compareWith:function(kind,index){ if(!comparing) setCompare(true); if(!comparing) return; var c=baselineCandidates(), i; for(i=0;i<c.length;i++){ if(c[i].kind===kind && (kind!=='history'||c[i].index===index)){ useBaseline(c[i]); return; } } },
+    revertChange:function(i){ return revertChange(i); },
+    changes:function(){ return {counts:cmp?cmp.counts:{ins:0,del:0,mod:0,fmt:0}, total:changeTotal(), index:changeIndex, baseline:baseline?baseline.label:''}; },
     notes:{
       list:function(){ return JSON.parse(JSON.stringify(notes)); },
       add:function(text,opts){ opts=opts||{}; var target=null; if(opts.range) target=targetFrom(opts.range); else if(opts.anchor) target=targetFrom(savedRange); var n=addNote(text,target); return n?n.id:null; },
