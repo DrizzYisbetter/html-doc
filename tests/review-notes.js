@@ -115,7 +115,7 @@ await page.reload(); await stub();
 check('backup: matching provenance shows the normal prompt', await page.evaluate(()=>{ const m=document.querySelector('#doc-restore-banner .msg').textContent; return document.getElementById('doc-restore-banner').classList.contains('show') && /복구하시겠어요/.test(m) && /같은 출처/.test(m) && !/다른 저장본/.test(m); }));
 await page.evaluate(()=>localStorage.removeItem('docedit:autosave:url:'+location.origin+location.pathname));
 check('open hint: toast when the file was saved by someone else', await page.evaluate(async()=>{
-  let src=await (await fetch('/assets/skeleton.html')).text();
+  let src=await (await fetch('/assets/skeleton.html',{cache:'no-store'})).text();
   src=src.replace('<body>','<body data-doc-saved-by="김검토" data-doc-saved-at="2026-09-12T05:03:00.000Z">').replace('id="doc-history">[]','id="doc-history">[{"ts":"2026-09-11T00:00:00.000Z","title":"이전","html":"<p>이전</p>","author":"나"}]');
   const f=document.createElement('iframe'); f.srcdoc=src; document.body.appendChild(f); await new Promise(r=>f.onload=r);
   const t=f.contentDocument.getElementById('doc-toast').textContent; f.remove();
@@ -298,7 +298,7 @@ check('compare: revert each change type through the API', await page.evaluate(()
   const cur='<p>하나 넷 셋</p><p style="text-align:center">정렬</p><p>새 문단</p>';
   // history[0]를 base로 만들기 위해 프레임을 쓴다.
   return (async()=>{
-    let src=await (await fetch('/assets/skeleton.html')).text();
+    let src=await (await fetch('/assets/skeleton.html',{cache:'no-store'})).text();
     src=src.replace('id="doc-history">[]','id="doc-history">[{"ts":"2026-09-11T00:00:00.000Z","title":"기준","html":"'+base.replace(/"/g,'\\"').replace(/</g,'\\u003c')+'","author":"작성자"}]');
     const f=document.createElement('iframe'); f.srcdoc=src; document.body.appendChild(f); await new Promise(r=>f.onload=r);
     const w=f.contentWindow, d=w.document, cc=d.getElementById('doc-content'); cc.innerHTML=cur;
@@ -322,6 +322,31 @@ check('compare: notes cannot be added while comparing but replies work', await p
   const replied=window.DocEditor.notes.reply(id,'비교 중 답글');
   window.DocEditor.compare(false);
   return blocked && kept && replied && window.DocEditor.notes.list()[0].replies.length===1 && !!c.querySelector('mark[data-doc-note="'+id+'"]');
+}));
+check('compare: removing a note while comparing keeps revert accurate', await page.evaluate(async()=>{
+  let src=await (await fetch('/assets/skeleton.html',{cache:'no-store'})).text();
+  const base='<p>하나 둘 셋</p>앞 외톨이 뒤<p>둘째 문단</p>';
+  src=src.replace('id="doc-history">[]','id="doc-history">[{"ts":"2026-09-11T00:00:00.000Z","title":"기준","html":"'+base.replace(/"/g,'\\"').replace(/</g,'\\u003c')+'","author":"작성자"}]');
+  const f=document.createElement('iframe'); f.srcdoc=src; document.body.appendChild(f); await new Promise(r=>f.onload=r);
+  const w=f.contentWindow, d=w.document, cc=d.getElementById('doc-content'); w.prompt=()=>'검토자';
+  cc.innerHTML='<p>하나 둘 셋</p>앞 외톨이 뒤<p>둘째 문장</p>';
+  const r=d.createRange(); r.setStart(cc.childNodes[1],2); r.setEnd(cc.childNodes[1],5);
+  const id=w.DocEditor.notes.add('외톨이 메모',{range:r});
+  w.DocEditor.compareWith('history',0);
+  const before=w.DocEditor.changes().total;
+  w.DocEditor.notes.remove(id);
+  const ok=w.DocEditor.revertChange(0);
+  w.DocEditor.compare(false); const body=cc.innerHTML; f.remove();
+  return before===1 && ok && body===base;
+}));
+check('compare: Escape and history restore close the comparison', await page.evaluate(()=>{
+  const c=document.getElementById('doc-content'); c.innerHTML='<p>하나</p><p>둘</p>';
+  window.DocEditor.compareWith('session'); const on1=window.DocEditor.isComparing();
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); const off1=!window.DocEditor.isComparing() && c.innerHTML==='<p>하나</p><p>둘</p>';
+  window.DocEditor.compareWith('session'); document.getElementById('doc-historyBtn').click();
+  const item=document.querySelector('#doc-hist-list .doc-ed-hist-item'); if(!item) return false; item.click();
+  document.querySelector('#doc-hist-preview .doc-ed-btn.primary').click();
+  return on1 && off1 && !window.DocEditor.isComparing() && !document.querySelector('#doc-content [data-doc-change]') && !document.body.classList.contains('doc-changes');
 }));
 await page.evaluate(()=>{ window.DocEditor.notes.list().forEach(n=>window.DocEditor.notes.remove(n.id)); Object.keys(localStorage).filter(k=>k.startsWith('docedit:autosave:')).forEach(k=>localStorage.removeItem(k)); });
 

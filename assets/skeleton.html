@@ -950,7 +950,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   function removeNote(id){
     var i; for(i=0;i<notes.length;i++) if(notes[i].id===id) break; if(i>=notes.length) return false;
     notes.splice(i,1); unwrapMarks(id,content);
-    if(comparing){ var model=document.createElement('div'); model.innerHTML=pristineHtml; unwrapMarks(id,model); pristineHtml=model.innerHTML; }
+    if(comparing){ var model=document.createElement('div'); model.innerHTML=pristineHtml; unwrapMarks(id,model); pristineHtml=model.innerHTML; renderCompare(); }
     afterNotesChange(); return true;
   }
   function openCount(){ var n=0; for(var i=0;i<notes.length;i++) if(!notes[i].resolved) n++; return n; }
@@ -1008,7 +1008,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     return card;
   }
   function renderNotes(){
-    var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'), list=$('doc-notesList'), chk=$('doc-notesShowResolved'), showResolved=!!(chk&&chk.checked), shown=[], i, keep=Object.create(null), drafts=Object.create(null), card, box, ta, state;
+    var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'), list=$('doc-notesList'), chk=$('doc-notesShowResolved'), showResolved=!!(chk&&chk.checked), shown=[], i, keep=Object.create(null), drafts=Object.create(null), card, box, state;
     if(count) count.textContent=open?String(open):''; if(btn) btn.title=open?('미해결 메모 '+open+'개'):'메모 보기·남기기';
     showTarget();
     if(!list) return;
@@ -1055,6 +1055,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   function baselineCandidates(){
     var list=[], cur=getContentHtml();
     if(cur!==lastSavedHtml) list.push({kind:'session',label:'마지막 저장 이후 (미저장 수정)',html:lastSavedHtml});
+    else if(baseline&&baseline.kind==='session') list.push(baseline);
     history.forEach(function(h,i){ list.push({kind:'history',index:i,label:(h.author||'이름 없음')+' · '+fmtTs(h.ts)+' · '+h.title,html:h.html}); });
     if(fileBaseline) list.push(fileBaseline);
     return list;
@@ -1084,6 +1085,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   }
   function stepChange(dir){ var total=changeTotal(); if(!total) return; selectChange(((changeIndex<0?(dir>0?-1:0):changeIndex)+dir+total)%total,true); }
   function renderCompare(){
+    if(!comparing) return;
     var summary=$('doc-changesSummary'), n, total;
     if(!baseline){ content.innerHTML=pristineHtml; cmp=null; changeIndex=-1; if(summary) summary.textContent='비교할 저장본이 없습니다. 파일을 선택해 비교할 수 있습니다.'; updateChangeButtons(); reconcileNotes(); return; }
     cmp=window.DocEditorDiff.compare(baseline.html,pristineHtml);
@@ -1096,7 +1098,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     reconcileNotes();
   }
   function baselineValue(b){ return b.kind==='history'?('history:'+b.index):b.kind; }
-  function useBaseline(b){ baseline=b; var sel=$('doc-changesBase'); if(sel&&b) sel.value=baselineValue(b); renderCompare(); }
+  function useBaseline(b){ if(!comparing) return; baseline=b; var sel=$('doc-changesBase'); if(sel&&b) sel.value=baselineValue(b); renderCompare(); }
   function setCompare(on){
     if(on){
       if(comparing) return;
@@ -1122,7 +1124,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   }
   function revertChange(i){
     if(!comparing||!cmp) return false;
-    if(typeof i==='number') changeIndex=i;
+    if(typeof i==='number'){ if(i<0||i>=cmp.changes.length) return false; changeIndex=i; }
     if(changeIndex<0||changeIndex>=cmp.changes.length) return false;
     var model=document.createElement('div'); model.innerHTML=pristineHtml;
     if(!window.DocEditorDiff.revert(cmp,changeIndex,model)){ toast('되돌리지 못했습니다.'); return false; }
@@ -1306,7 +1308,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     var editorScript=clone.querySelector('#doc-editor-script');
     if(!editorStyle || !editorScript) throw new Error('편집 엔진의 style/script ID가 없습니다. 크롬과 엔진을 함께 업데이트하세요.');
     // 편집기로 삽입한 표의 보기 스타일만 남긴다. 툴바/패널 스타일은 내보내지 않는다.
-    if(/doc-ed-tablewrap|doc-ed-table/.test(getContentHtml())){
+    if(/class="[^"]*doc-ed-table/.test(getContentHtml())){
       var rules=Array.prototype.filter.call($('doc-editor-style').sheet.cssRules,function(rule){
         return rule.selectorText && rule.selectorText.split(',').every(function(selector){
           selector=selector.trim(); return selector==='.doc-ed-tablewrap' || selector.indexOf('#doc-content table.doc-ed-table')===0;
@@ -1401,6 +1403,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
       if(wroteFile && rememberAtThisLocation) remembered=(await fileLinkStore('put',handle)).ok;
       updateSaveHint();
       lastSavedHtml=savedHtml;
+      if(comparing) fillBaseOptions();
       // 일반 저장에서 경로 키가 ID 키로 바뀌었으면 새 키 백업에 성공한 뒤 경로 키 백업을 지운다. 다른 이름으로 저장할 때는 원래 경로의 백업을 건드리지 않는다.
       if(writeBackup() && wasPathKeyed && !forceNew){ try{ localStorage.removeItem('docedit:autosave:url:'+location.origin+location.pathname); }catch(e){} }
       var banner=$('doc-restore-banner'); if(banner) banner.classList.remove('show');
