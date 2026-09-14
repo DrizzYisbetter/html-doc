@@ -838,7 +838,7 @@ Expected: `FAIL: author: prompt once on first save and remembered`.
 - [ ] **Step 5: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && node --check assets/doc-editor.js && aside repl "$(cat tests/review-notes.js)" && aside repl "$(cat tests/browser-regression.js)" && aside repl "$(cat tests/persistent-save.js)"`
-Expected: review-notes `"pass":true,"count":20`, browser-regression `"pass":true,"count":16`, persistent-save `"pass":true`.
+Expected: review-notes `"pass":true,"count":19`, browser-regression `"pass":true,"count":16`, persistent-save `"pass":true`.
 
 - [ ] **Step 6: 커밋**
 
@@ -1047,7 +1047,7 @@ Expected: `FAIL: notes: anchored note wraps the selection ...` (`window.DocEdito
 - [ ] **Step 5: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && node --check assets/doc-editor.js && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":29`.
+Expected: `"pass":true,"count":28`.
 
 - [ ] **Step 6: 커밋**
 
@@ -1340,7 +1340,7 @@ body.doc-notes-open #doc-inspector{ display:none; }
 - [ ] **Step 6: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":36`.
+Expected: `"pass":true,"count":35`.
 
 - [ ] **Step 7: 커밋**
 
@@ -1608,7 +1608,7 @@ Expected: `FAIL: compare: session baseline ...` (`window.DocEditor.compare is no
 - [ ] **Step 4: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && node --check assets/doc-editor.js && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":43`.
+Expected: `"pass":true,"count":42`.
 
 - [ ] **Step 5: 커밋**
 
@@ -1802,7 +1802,7 @@ body.doc-changes #doc-content [data-doc-change]{ cursor:pointer; }
 - [ ] **Step 5: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":48`.
+Expected: `"pass":true,"count":47`.
 
 - [ ] **Step 6: 커밋**
 
