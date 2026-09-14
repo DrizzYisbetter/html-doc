@@ -52,10 +52,25 @@ check('diff: inline runs and table cells', await page.evaluate(()=>{
   const td=cmp.cRoot.querySelector('td.doc-ed-diff-mod[data-doc-change="1"]');
   return cmp.counts.mod===2 && !!run && run.innerHTML.includes('<del class="doc-ed-del">텍스트</del>') && run.innerHTML.includes('<ins class="doc-ed-ins">글</ins>') && !!td && td.innerHTML.includes('<del class="doc-ed-del">나</del>') && td.innerHTML.includes('<ins class="doc-ed-ins">다</ins>');
 }));
-check('diff: deleted list item outside a list is wrapped', await page.evaluate(()=>{
-  const D=window.DocEditorDiff, cmp=D.compare('<ul><li>남는 항목</li><li>지운 항목</li></ul><p>끝</p>','<ul><li>남는 항목</li></ul><p>끝</p>');
-  D.render(cmp); const del=cmp.cRoot.querySelector('.doc-ed-diff-del');
-  return cmp.counts.del===1 && del.tagName==='LI' && del.parentNode.tagName==='UL';
+check('diff: deleted last list item stays inside its list (render and revert)', await page.evaluate(()=>{
+  const D=window.DocEditorDiff, base='<ul><li>남는 항목</li><li>지운 항목</li></ul><p>끝</p>', cur='<ul><li>남는 항목</li></ul><p>끝</p>';
+  const cmp=D.compare(base,cur); D.render(cmp); const del=cmp.cRoot.querySelector('.doc-ed-diff-del');
+  const model=document.createElement('div'); model.innerHTML=cur; const ok=D.revert(cmp,0,model);
+  return cmp.counts.del===1 && !!del && del.tagName==='LI' && del.parentNode.tagName==='UL' && ok && model.innerHTML===base;
+}));
+check('diff: deleted cell stays in its row, deleted paragraph stays in its section', await page.evaluate(()=>{
+  const D=window.DocEditorDiff;
+  const t=D.compare('<table><tbody><tr><td>가</td><td>나</td></tr><tr><td>다</td></tr></tbody></table>','<table><tbody><tr><td>가</td></tr><tr><td>다</td></tr></tbody></table>'); D.render(t);
+  const cell=t.cRoot.querySelector('td.doc-ed-diff-del'), rowOk=!!cell && cell.parentNode===t.cRoot.querySelector('tr');
+  const s=D.compare('<section><p>A</p><p>B</p></section><p>C</p>','<section><p>A</p></section><p>C</p>'); D.render(s);
+  const para=s.cRoot.querySelector('p.doc-ed-diff-del'), secOk=!!para && para.parentNode.tagName==='SECTION';
+  const m=document.createElement('div'); m.innerHTML='<section><p>A</p></section><p>C</p>'; const revOk=D.revert(s,0,m) && m.innerHTML==='<section><p>A</p><p>B</p></section><p>C</p>';
+  return rowOk && secOk && revOk;
+}));
+check('diff: empty sides and unchanged hr', await page.evaluate(()=>{
+  const D=window.DocEditorDiff, a=D.compare('','<p>x</p>'), b=D.compare('<p>x</p>',''), c=D.compare('<p>a</p><hr><p>b</p>','<p>a</p><hr><p>b</p>');
+  D.render(b);
+  return a.counts.ins===1 && b.counts.del===1 && b.cRoot.innerHTML==='<p class="doc-ed-diff-del" data-doc-change="0">x</p>' && c.changes.length===0 && c.ops.every(o=>o.type==='eq');
 }));
 check('diff: exceeded budget falls back to whole replacement', await page.evaluate(()=>{
   const D=window.DocEditorDiff;
