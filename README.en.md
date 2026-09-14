@@ -6,7 +6,7 @@ An Agent Skills package for making editable, standalone HTML documents.
 
 Create a report, guide, or letter with an inline editor. Open the resulting HTML in a browser to edit text and formatting, save changes, recover a local backup, or download a clean read-only copy. No server, browser extension, or AI account is needed to use a generated document.
 
-**Current release: 1.5.0.** Agent instructions are in English, with a Korean reference. The editor and conversion-tool UI are currently **Korean**; document content can be in any language. This package does not yet provide an English UI toggle.
+**Current release: 1.6.0.** Agent instructions are in English, with a Korean reference. The editor and conversion-tool UI are currently **Korean**; document content can be in any language. This package does not yet provide an English UI toggle.
 
 ## Downloads
 
@@ -67,6 +67,10 @@ Official references: [Agent Skills](https://agentskills.io/home), [Claude Code](
 | 인쇄 | Print the document |
 
 `Cmd/Ctrl+E` toggles editing. `Cmd/Ctrl+S` saves. Formatting includes headings, fonts, sizes, colors, alignment, lists, and tables.
+
+- **Notes:** select text and leave a note; others reply or resolve it. Notes live inside the file and are dropped from the read-only export.
+- **Changes:** compare a returned document with a saved version or another file, see additions, deletions, edits, and format changes over the body, and revert any change.
+- **Author and provenance:** the editor asks for your name once per browser and records who saved each version.
 
 ## Saving and compatibility
 

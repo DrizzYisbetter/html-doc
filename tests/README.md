@@ -38,7 +38,7 @@ from pathlib import Path
 import subprocess
 
 for name in ['browser-regression', 'persistent-save', 'mobile-layout',
-             'export-readonly', 'attach-editor']:
+             'export-readonly', 'attach-editor', 'review-notes']:
     result = subprocess.run(
         ['aside', 'repl', Path('tests', name + '.js').read_text()],
         capture_output=True, text=True,
@@ -50,5 +50,11 @@ for name in ['browser-regression', 'persistent-save', 'mobile-layout',
 Run them sequentially: the tests change test-origin backups and IndexedDB. If the port is occupied, select another dedicated port and update all test URLs. No private reports or external QA aliases are required.
 
 Coverage: restoration and history (16 checks), file-handle persistence (5), responsive layout and formatting (94), read-only export on the bundled skeleton/demo (16), attachment and encoding (34).
+
+`review-notes.js` covers the diff engine, author prompt, provenance, backup safety, notes (API and panel), comparison mode (API and bar), and narrow layouts. Stub `window.prompt` in any new browser test that saves or adds notes. Pure diff functions also have Node tests:
+
+```sh
+node --test tests/unit/*.test.js
+```
 
 The file tests use OPFS/IndexedDB and partly mocked file handles or input events. They do not prove native OS picker behavior or real local-file overwrite permissions. Viewport simulations do not prove iOS/Android keyboard behavior. Prior full reports are not bundled; rerun tests in your target environment before claiming that environment is supported.

@@ -1,8 +1,8 @@
 ---
 name: html-doc
-description: Create editable, standalone HTML documents, add an inline editor to existing HTML, and export clean read-only HTML. Use for reports, guides, letters, and other documents that users want to edit in a browser and save as HTML.
+description: Create editable, standalone HTML documents, add an inline editor to existing HTML, and export clean read-only HTML. Use for reports, guides, letters, and other documents that users want to edit in a browser and save as HTML. Includes review tools: change comparison against saved versions and anchored notes with replies.
 metadata:
-  version: "1.5.0"
+  version: "1.6.0"
 ---
 
 # HTML Doc
@@ -23,10 +23,11 @@ Read the template before replacing sections. It contains a document stylesheet a
 ## Editor integration contract
 
 - Exactly one body container has `id="doc-content"` and starts with `contenteditable="false"`.
-- Keep all seven UI blocks: `doc-controls`, `doc-editbar`, `doc-inspector`, `doc-editflag`, `doc-restore-banner`, `doc-history-modal`, and `doc-toast`.
+- Keep all nine UI blocks: `doc-controls`, `doc-editbar`, `doc-changes-bar`, `doc-inspector`, `doc-notes-panel`, `doc-editflag`, `doc-restore-banner`, `doc-history-modal`, and `doc-toast`.
 - Keep `<script type="application/json" id="doc-history">[]</script>` for a new document. Preserve existing history when updating an existing editor.
+- Keep `<script type="application/json" id="doc-notes">[]</script>` next to the history store. Preserve existing notes when updating an existing editor. The engine creates an empty store if it is missing.
 - `#doc-editor-style` contains `assets/doc-editor.css`.
-- `#doc-editor-script` contains `assets/doc-attach.js` followed by `assets/doc-editor.js`, in that order, within one script element. Both are already inlined in built templates.
+- `#doc-editor-script` contains `assets/doc-attach.js`, `assets/doc-diff.js`, then `assets/doc-editor.js`, in that order, within one script element. Both are already inlined in built templates.
 - The UI uses `doc-*` IDs/classes and `--doc-ed-*` variables. It is not isolated with Shadow DOM, so inspect interference from document-wide CSS.
 
 ## Existing HTML
@@ -49,6 +50,14 @@ Explain these distinctions accurately:
 
 On screens up to 900px, extra actions are in **더보기**. The formatting toolbar scrolls horizontally, and **현재 서식** opens a collapsible inspector. Preserve the document's own responsive design.
 
+## Review tools (1.6.0)
+
+- **Notes:** **메모** opens a side panel. Select body text and write in the box to attach a note to that text (`<mark class="doc-ed-note" data-doc-note="ID">`); without a selection the note applies to the whole document. Notes, replies, and resolved state live in `#doc-notes` inside the file. Anyone with the file can reply, resolve, or delete. Read-only export unwraps marks and drops the store.
+- **Change comparison:** **변경 사항** compares the current body with a baseline and overlays additions (green), deletions (red strikethrough), modified paragraphs (word-level marks), and format-only changes. Baselines: the state at the last save (when unsaved edits exist), any saved version in the history (labelled by author and time), or an HTML file. The default baseline is the most recent version saved by someone other than the current saver. **원래대로** reverts the selected change; the result still needs a regular save. Comparison is view-only; saving or exporting while comparing writes the clean body.
+- **Author name:** the editor asks for a name once per browser (first note or first save) and stores it in `localStorage` as `docedit:author`. It can be changed in the notes panel. The name is not stored in the document except as the provenance of a saved version (`data-doc-saved-by`, `data-doc-saved-at` on `body`) and in history entries (`author`).
+- **Backup safety:** the first regular save assigns `data-doc-id` so browser backups are keyed per document instead of per path. Backups record the provenance of the body they were made from; when a backup does not match the opened file, the restore banner says so, and restoring keeps the current body in the history first.
+- On screens up to 900px the **메모** control hides while editing (use the toolbar **메모** button) and **변경 사항** is in **더보기**.
+
 ## Maintenance and existing-document upgrades
 
 Edit canonical files under `assets/`; edit UI markup in `assets/skeleton-src.html`. Then run:
@@ -58,7 +67,7 @@ python3 assets/build-template.py
 python3 assets/build-template.py --check
 ```
 
-This rebuilds the skeleton, demo, and standalone attachment tool. Do not update generated copies alone. Existing user documents do not update automatically: preserve their body, design, history, and `data-doc-id`, and replace the engine CSS/script and seven UI blocks together.
+This rebuilds the skeleton, demo, and standalone attachment tool. Do not update generated copies alone. Existing user documents do not update automatically: preserve their body, design, history, and `data-doc-id`, and replace the engine CSS/script and nine UI blocks together, and add the empty `#doc-notes` store.
 
 For an old document without an ID, recover needed backups with its previous engine and save first. Do not automatically adopt or delete the legacy global `__unsaved__` backup.
 
@@ -69,7 +78,9 @@ For each generated or upgraded document:
 - Check the DOM for one editable root and all editor blocks. Searching HTML text for IDs is insufficient because engine strings also contain them.
 - Toggle edit mode, modify a test copy, and verify formatting and the saved body.
 - Parse `DocEditor.getHTML()`: editor remains, root is not actively editable, and transient menus/panels are closed.
+- Parse `DocEditor.getHTML()` while a comparison is open: no `data-doc-change`, `ins.doc-ed-ins`, or `del.doc-ed-del` may appear in the body.
 - Parse `DocEditor.getReadOnlyHTML()`: editor and history are absent, current content/design remain, and source editing state is unchanged.
+- Add a note, reload, and confirm the note and its mark survive in the saved file; export and confirm both are gone.
 - At a narrow viewport, verify toolbar access, more-menu actions, inspector, and horizontal overflow.
 - For editor maintenance, follow [tests/README.md](tests/README.md) for recovery and persistence regressions. Aside is an optional developer test harness, not a runtime or skill requirement.
 

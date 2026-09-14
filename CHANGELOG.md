@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.0
+
+- Add anchored notes with replies and resolution, stored in the file (`#doc-notes`) and shown in a side panel.
+- Add change comparison against saved versions, the last save, or an HTML file, with per-change revert.
+- Ask for an author name once per browser; record save provenance and history authors.
+- Assign a document ID on the first save, record backup provenance, warn on mismatched backups, and keep the current body in history before restoring.
+- Add `assets/doc-diff.js` (engine order: attach, diff, editor) and two UI blocks (`doc-notes-panel`, `doc-changes-bar`).
+
 ## 1.5.0
 
 - Attach the editor to existing HTML and download an editable copy.
