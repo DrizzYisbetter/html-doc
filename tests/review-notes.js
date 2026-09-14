@@ -122,4 +122,55 @@ check('open hint: toast when the file was saved by someone else', await page.eva
   return /김검토/.test(t) && /변경 사항/.test(t);
 }));
 
+// ---- C. 메모: 저장소·앵커·API ----
+await fresh();
+check('notes: anchored note wraps the selection and records a quote', await page.evaluate(()=>{
+  const c=document.getElementById('doc-content'); c.innerHTML='<p id="qa-p1">첫째 문장입니다. 둘째 문장입니다.</p><p id="qa-p2">셋째 문장입니다.</p>';
+  const t=document.getElementById('qa-p1').firstChild, r=document.createRange(); r.setStart(t,3); r.setEnd(t,9);
+  const id=window.DocEditor.notes.add('근거를 보강해 주세요',{range:r});
+  const mark=c.querySelector('mark.doc-ed-note'), list=window.DocEditor.notes.list();
+  return !!id && window.__prompts===1 && !!mark && mark.getAttribute('data-doc-note')===id && mark.textContent==='문장입니다.' && document.getElementById('qa-p1').textContent==='첫째 문장입니다. 둘째 문장입니다.' && list.length===1 && list[0].anchored && list[0].quote==='문장입니다.' && list[0].author==='검토자' && list[0].resolved===false;
+}));
+check('notes: multi-paragraph selection creates marks with one id', await page.evaluate(()=>{
+  const p1=document.getElementById('qa-p1'), p2=document.getElementById('qa-p2'), r=document.createRange();
+  r.setStart(p1.lastChild,p1.lastChild.nodeValue.length-6); r.setEnd(p2.firstChild,2);
+  const id=window.DocEditor.notes.add('두 문단에 걸친 메모',{range:r});
+  const marks=document.querySelectorAll('mark.doc-ed-note[data-doc-note="'+id+'"]');
+  return marks.length===2 && marks[0].closest('p')===p1 && marks[1].closest('p')===p2 && marks[0].textContent==='문장입니다.' && marks[1].textContent==='셋째';
+}));
+check('notes: whole-document note has no anchor', await page.evaluate(()=>{ const id=window.DocEditor.notes.add('전체 의견'); const n=window.DocEditor.notes.list().find(x=>x.id===id); return !!n && !n.anchored && n.quote==='' && document.querySelectorAll('mark.doc-ed-note').length===3; }));
+check('notes: reply, resolve, reopen', await page.evaluate(()=>{
+  const id=window.DocEditor.notes.list()[0].id;
+  const ok1=window.DocEditor.notes.reply(id,'반영했습니다'), ok2=window.DocEditor.notes.resolve(id,true);
+  const resolvedMark=document.querySelector('mark[data-doc-note="'+id+'"]').classList.contains('doc-ed-note-resolved');
+  const n=window.DocEditor.notes.list()[0];
+  const ok3=window.DocEditor.notes.resolve(id,false);
+  return ok1 && ok2 && ok3 && resolvedMark && n.replies.length===1 && n.replies[0].text==='반영했습니다' && n.replies[0].author==='검토자' && n.resolved===true && !document.querySelector('mark[data-doc-note="'+id+'"]').classList.contains('doc-ed-note-resolved');
+}));
+check('notes: saved file carries store and marks, export strips both', await page.evaluate(()=>{
+  const d=new DOMParser().parseFromString(window.DocEditor.getHTML(),'text/html'), store=JSON.parse(d.getElementById('doc-notes').textContent);
+  const ro=new DOMParser().parseFromString(window.DocEditor.getReadOnlyHTML(),'text/html');
+  return store.length===3 && d.querySelectorAll('#doc-content mark.doc-ed-note').length===3 && !ro.getElementById('doc-notes') && !ro.querySelector('mark.doc-ed-note') && ro.getElementById('doc-content').textContent.includes('첫째 문장입니다. 둘째 문장입니다.') && !ro.body.hasAttribute('data-doc-saved-by');
+}));
+check('notes: remove unwraps marks and merges text', await page.evaluate(()=>{
+  const id=window.DocEditor.notes.list()[0].id, ok=window.DocEditor.notes.remove(id), p1=document.getElementById('qa-p1');
+  return ok && document.querySelectorAll('mark[data-doc-note="'+id+'"]').length===0 && window.DocEditor.notes.list().length===2 && p1.childNodes.length===2 && p1.childNodes[0].nodeValue==='첫째 문장입니다. 둘째 ';
+}));
+check('notes: marks without a stored note are unwrapped', await page.evaluate(()=>{
+  const c=document.getElementById('doc-content');
+  c.insertAdjacentHTML('beforeend','<p>고아 <mark class="doc-ed-note" data-doc-note="ghost">표시</mark></p>');
+  const id=window.DocEditor.notes.list()[0].id;
+  document.querySelectorAll('mark[data-doc-note="'+id+'"]').forEach(m=>m.replaceWith(...m.childNodes));
+  window.DocEditor.notes.resolve(window.DocEditor.notes.list()[1].id,false);
+  return !c.querySelector('mark[data-doc-note="ghost"]') && c.textContent.includes('고아 표시') && window.DocEditor.notes.list()[0].anchored===true;
+}));
+check('notes: browser backup includes notes', await page.evaluate(async()=>{
+  await new Promise(r=>setTimeout(r,900));
+  const a=JSON.parse(localStorage.getItem('docedit:autosave:url:'+location.origin+location.pathname));
+  return !!a && Array.isArray(a.notes) && a.notes.length===2 && a.notes[0].text==='두 문단에 걸친 메모';
+}));
+await page.reload(); await stub();
+check('notes: recovery restores notes with the body', await page.evaluate(()=>{ const b=document.getElementById('doc-restore-banner'); if(!b.classList.contains('show')) return false; document.getElementById('doc-rb-restore').click(); return window.DocEditor.notes.list().length===2 && document.getElementById('doc-content').textContent.includes('고아 표시'); }));
+await page.evaluate(()=>localStorage.removeItem('docedit:autosave:url:'+location.origin+location.pathname));
+
 console.log(JSON.stringify({pass:true,count:results.length,results}));

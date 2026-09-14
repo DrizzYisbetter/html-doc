@@ -541,6 +541,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
 </main>
 
 <script type="application/json" id="doc-history">[]</script>
+<script type="application/json" id="doc-notes">[]</script>
 
 <!-- ===== doc-editor 엔진 (인라인 · 수정 금지) ===== -->
 <script id="doc-editor-script">
@@ -915,6 +916,8 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   var body=document.body;
   if(!content){ console.warn('[doc-editor] #doc-content 를 찾지 못했습니다. 편집할 콘텐츠를 <main id="doc-content"> 안에 넣으세요.'); return; }
   if(!histEl){ histEl=document.createElement('script'); histEl.type='application/json'; histEl.id='doc-history'; histEl.textContent='[]'; document.body.appendChild(histEl); }
+  var notesEl=document.getElementById('doc-notes');
+  if(!notesEl){ notesEl=document.createElement('script'); notesEl.type='application/json'; notesEl.id='doc-notes'; notesEl.textContent='[]'; histEl.parentNode.insertBefore(notesEl,histEl.nextSibling); }
 
   var editing=false, fileHandle=null, savedRange=null, saving=false;
   var lastSavedHtml=content.innerHTML;
@@ -922,11 +925,18 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   var autosaveTimer=null;
   var lastBackedUpHtml=content.innerHTML;
   var lastBackedUpNotes='[]';
-  var notes=[];                       // 메모 저장소 (Task 4에서 #doc-notes와 연결)
+  var notes=loadNotes();
   var comparing=false, pristineHtml=null; // 비교 모드 (Task 6). 비교 중에는 화면 대신 원본 문자열이 진짜 본문이다.
   function getContentHtml(){ return comparing?pristineHtml:content.innerHTML; }
-  function sanitizeNotes(arr){ return Array.isArray(arr)?arr.filter(function(v){ return v && typeof v.id==='string' && typeof v.text==='string'; }):[]; }
-  function afterContentReplaced(){ }   // 본문을 통째로 바꾼 뒤 호출 (Task 4에서 메모 정합성 갱신을 넣는다)
+  function sanitizeNotes(arr){
+    if(!Array.isArray(arr)) return [];
+    return arr.filter(function(v){ return v && typeof v.id==='string' && typeof v.text==='string'; }).map(function(v){
+      return {id:v.id, author:typeof v.author==='string'?v.author:'', ts:typeof v.ts==='string'?v.ts:'', text:v.text, quote:typeof v.quote==='string'?v.quote:'', anchored:!!v.anchored, resolved:!!v.resolved,
+        replies:Array.isArray(v.replies)?v.replies.filter(function(r){ return r && typeof r.text==='string'; }).map(function(r){ return {author:typeof r.author==='string'?r.author:'', ts:typeof r.ts==='string'?r.ts:'', text:r.text}; }):[]};
+    });
+  }
+  function loadNotes(){ try{ return sanitizeNotes(JSON.parse(notesEl.textContent||'[]')); }catch(e){ return []; } }
+  function afterContentReplaced(){ reconcileNotes(); renderNotes(); }
   var originalPaddingTop=body.style.paddingTop;
   var originalPaddingPixels=parseFloat(getComputedStyle(body).paddingTop)||0;
   var layoutFrame=null;
@@ -999,6 +1009,58 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   // 디바운스 중 문서를 닫아도 마지막 입력을 보존한다.
   window.addEventListener('pagehide', function(){ if(autosaveTimer!==null) doAutosave(); });
   document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='hidden' && autosaveTimer!==null) doAutosave(); });
+
+  /* ---------- 메모 (저장소 #doc-notes + 본문 mark 앵커) ---------- */
+  var noteTarget=null, locateTimer=null;
+  function normText(s){ return (s||'').replace(/ /g,' ').replace(/\s+/g,' ').trim(); }
+  function findNote(id){ for(var i=0;i<notes.length;i++) if(notes[i].id===id) return notes[i]; return null; }
+  function noteMarks(id,root){ return (root||content).querySelectorAll('mark.doc-ed-note[data-doc-note="'+id+'"]'); }
+  function unwrapMark(m){ var p=m.parentNode; while(m.firstChild) p.insertBefore(m.firstChild,m); p.removeChild(m); p.normalize(); }
+  function unwrapMarks(id,root){ var marks=noteMarks(id,root); for(var i=0;i<marks.length;i++) unwrapMark(marks[i]); }
+  // 선택 범위 안의 텍스트 노드를 같은 ID의 mark로 감싼다. 경계 텍스트는 잘라 선택한 부분만 감싼다.
+  function wrapRange(range,id){
+    var sc=range.startContainer, so=range.startOffset, ec=range.endContainer, eo=range.endOffset, r=document.createRange(), walker, nodes=[], t, i, m, rest;
+    if(ec.nodeType===3 && eo<ec.nodeValue.length) ec.splitText(eo);
+    if(sc.nodeType===3 && so>0){ rest=sc.splitText(so); if(ec===sc) ec=rest; sc=rest; so=0; }
+    if(sc.nodeType===3) r.setStart(sc,0); else r.setStart(sc,so);
+    if(ec.nodeType===3) r.setEnd(ec,ec.nodeValue.length); else r.setEnd(ec,eo);
+    walker=document.createTreeWalker(content,NodeFilter.SHOW_TEXT,null);
+    while((t=walker.nextNode())) if(r.intersectsNode(t)) nodes.push(t);
+    while(nodes.length && !normText(nodes[0].nodeValue)) nodes.shift();
+    while(nodes.length && !normText(nodes[nodes.length-1].nodeValue)) nodes.pop();
+    if(!nodes.length) return false;
+    for(i=0;i<nodes.length;i++){ m=document.createElement('mark'); m.className='doc-ed-note'; m.setAttribute('data-doc-note',id); nodes[i].parentNode.insertBefore(m,nodes[i]); m.appendChild(nodes[i]); }
+    return true;
+  }
+  function quoteOf(range){ var q=normText(range.toString()); return q.length>80?q.slice(0,80)+'…':q; }
+  function targetFrom(range){ if(!range || range.collapsed || !content.contains(range.commonAncestorContainer)) return null; var q=quoteOf(range); return q?{range:range.cloneRange(),quote:q}:null; }
+  function addNote(text,target){
+    text=(text||'').trim(); if(!text) return null;
+    if(comparing){ toast('비교를 닫고 메모를 남겨 주세요.'); return null; }
+    var author=ensureAuthor(), id='n-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6), anchored=false, quote='', ok=false;
+    if(target && target.range){ try{ ok=wrapRange(target.range,id); }catch(e){ ok=false; } if(ok){ anchored=true; quote=target.quote; } else toast('선택한 부분을 표시할 수 없어 문서 전체 메모로 남겼습니다.'); }
+    var note={id:id,author:author,ts:new Date().toISOString(),text:text,quote:quote,anchored:anchored,resolved:false,replies:[]};
+    notes.push(note); savedRange=null; afterNotesChange(); return note;
+  }
+  function replyNote(id,text){ var n=findNote(id); text=(text||'').trim(); if(!n||!text) return false; n.replies.push({author:ensureAuthor(),ts:new Date().toISOString(),text:text}); afterNotesChange(); return true; }
+  function resolveNote(id,on){ var n=findNote(id); if(!n) return false; n.resolved=!!on; afterNotesChange(); return true; }
+  function removeNote(id){
+    var i; for(i=0;i<notes.length;i++) if(notes[i].id===id) break; if(i>=notes.length) return false;
+    notes.splice(i,1); unwrapMarks(id,content);
+    if(comparing){ var model=document.createElement('div'); model.innerHTML=pristineHtml; unwrapMarks(id,model); pristineHtml=model.innerHTML; }
+    afterNotesChange(); return true;
+  }
+  function openCount(){ var n=0; for(var i=0;i<notes.length;i++) if(!notes[i].resolved) n++; return n; }
+  // 저장소에 없는 mark는 풀고, 빈 mark는 지우고, 해결 상태를 mark 클래스에 맞춘다. 비교 중에는 화면(렌더)의 클래스만 맞춘다.
+  function reconcileNotes(){
+    var marks=content.querySelectorAll('mark.doc-ed-note'), i, m, n;
+    for(i=0;i<marks.length;i++){ m=marks[i]; n=findNote(m.getAttribute('data-doc-note')||'');
+      if(!comparing && (!n || !normText(m.textContent))){ unwrapMark(m); continue; }
+      m.classList.toggle('doc-ed-note-resolved', !!(n && n.resolved)); }
+  }
+  function noteHasAnchor(id){ return noteMarks(id).length>0; }
+  function afterNotesChange(){ reconcileNotes(); renderNotes(); scheduleAutosave(); }
+  function renderNotes(){ var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'); if(count) count.textContent=open?String(open):''; if(btn) btn.title=open?('미해결 메모 '+open+'개'):'메모 보기·남기기'; }
 
   /* ---------- 편집 모드 ---------- */
   function setEdit(on){
@@ -1132,9 +1194,10 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   function pushHistoryIfChanged(){ var cur=getContentHtml(); if(cur!==lastSavedHtml && !(history[0] && history[0].html===lastSavedHtml)){ history.unshift({ts:body.dataset.docSavedAt||new Date().toISOString(), title:snapshotTitle(lastSavedHtml), html:lastSavedHtml, author:body.dataset.docSavedBy||''}); history=history.slice(0,30); } }
   function serialize(){
     histEl.textContent=escForScript(JSON.stringify(history));
+    notesEl.textContent=escForScript(JSON.stringify(notes));
     var clone=document.documentElement.cloneNode(true);
     clone.querySelectorAll('[data-doc-editor-download]').forEach(function(el){el.remove();});
-    var b=clone.querySelector('body'); if(b){ b.classList.remove('doc-editing','doc-inspector-open'); b.style.paddingTop=originalPaddingTop; ['--doc-ed-controls-height','--doc-ed-controls-width','--doc-ed-tools-bottom','--doc-ed-visible-height'].forEach(function(name){b.style.removeProperty(name);}); }
+    var b=clone.querySelector('body'); if(b){ b.classList.remove('doc-editing','doc-inspector-open','doc-notes-open','doc-changes'); b.style.paddingTop=originalPaddingTop; ['--doc-ed-controls-height','--doc-ed-controls-width','--doc-ed-tools-bottom','--doc-ed-visible-height'].forEach(function(name){b.style.removeProperty(name);}); }
     var c=clone.querySelector('#doc-content'); if(c) c.setAttribute('contenteditable','false');
     ['#doc-restore-banner','#doc-toast'].forEach(function(s){ var el=clone.querySelector(s); if(el) el.classList.remove('show'); });
     var m=clone.querySelector('#doc-history-modal'); if(m) m.classList.remove('open');
@@ -1144,6 +1207,15 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     ['#doc-moreToggle','#doc-inspectorToggle'].forEach(function(sel){var t=clone.querySelector(sel);if(t)t.setAttribute('aria-expanded','false');});
     var et=clone.querySelector('#doc-editToggle'); if(et){ et.classList.remove('on'); et.textContent='✎ 편집'; }
     var attach=clone.querySelector('#doc-attachBtn');if(attach)attach.disabled=false;
+    clone.querySelectorAll('#doc-content .doc-ed-note-active').forEach(function(m){m.classList.remove('doc-ed-note-active');});
+    ['#doc-notesList','#doc-changesSummary','#doc-changesBase'].forEach(function(s){var el=clone.querySelector(s); if(el) el.innerHTML='';});
+    var nt=clone.querySelector('#doc-notesTarget'); if(nt){ nt.classList.remove('has'); var nq=nt.querySelector('.q'); if(nq) nq.textContent='문서 전체'; var nx=nt.querySelector('#doc-notesTargetClear'); if(nx) nx.hidden=true; }
+    var ni=clone.querySelector('#doc-notesInput'); if(ni) ni.textContent='';
+    var na=clone.querySelector('#doc-notesAuthor'); if(na) na.removeAttribute('value');
+    var nh=clone.querySelector('#doc-notesHint'); if(nh) nh.hidden=true;
+    var nbt=clone.querySelector('#doc-notesBtn'); if(nbt) nbt.setAttribute('aria-expanded','false');
+    var cbt=clone.querySelector('#doc-changesBtn'); if(cbt) cbt.classList.remove('on');
+    var rv=clone.querySelector('#doc-changesRevert'); if(rv) rv.disabled=true;
     return '<!DOCTYPE html>\n'+clone.outerHTML;
   }
   function suggestName(){ var t=snapshotTitle(getContentHtml()).replace(/[\\/:*?"<>|]/g,'').trim(); return (t||'문서')+'.html'; }
@@ -1165,14 +1237,15 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
       if(rules.length){var tableStyle=document.createElement('style');tableStyle.textContent=rules.map(function(rule){return rule.cssText;}).join('\n');editorStyle.before(tableStyle);}
     }
     ['#doc-controls','#doc-editbar','#doc-inspector','#doc-editflag','#doc-restore-banner',
-     '#doc-history-modal','#doc-toast','#doc-history','#doc-editor-style','#doc-editor-script',
+     '#doc-history-modal','#doc-toast','#doc-history','#doc-notes-panel','#doc-changes-bar','#doc-notes','#doc-editor-style','#doc-editor-script',
      '[data-doc-editor-download]'].forEach(function(selector){clone.querySelectorAll(selector).forEach(function(el){el.remove();});});
     var b=clone.querySelector('body');
     if(b){
       b.classList.remove('doc-editing','doc-inspector-open');b.removeAttribute('data-doc-id');b.removeAttribute('data-doc-saved-by');b.removeAttribute('data-doc-saved-at');b.style.paddingTop=originalPaddingTop;
       ['--doc-ed-controls-height','--doc-ed-controls-width','--doc-ed-tools-bottom','--doc-ed-visible-height'].forEach(function(name){b.style.removeProperty(name);});
     }
-    var c=clone.querySelector('#doc-content');if(c)c.removeAttribute('contenteditable');
+    var c=clone.querySelector('#doc-content');
+    if(c){ c.removeAttribute('contenteditable'); var marks=c.querySelectorAll('mark.doc-ed-note'); for(var k=0;k<marks.length;k++) unwrapMark(marks[k]); }
     var comments=[],walker=document.createTreeWalker(clone,NodeFilter.SHOW_COMMENT),node;
     while((node=walker.nextNode()))if(/doc-editor/.test(node.data) && !(c&&c.contains(node)))comments.push(node);
     comments.forEach(function(comment){comment.remove();});
@@ -1337,6 +1410,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   /* ---------- 초기화 ---------- */
   try{ document.execCommand('styleWithCSS',false,true); }catch(e){}
   updateEditorLayout();
+  reconcileNotes(); renderNotes();
   checkAutosave();
   (function(){ var by=body.dataset.docSavedBy||''; if(by && by!==currentAuthor() && history.length) toast(by+'이(가) 저장한 문서입니다. 변경 사항으로 수정된 부분을 볼 수 있습니다.',6000); })();
 
@@ -1349,7 +1423,12 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     author:function(name){ if(typeof name==='string'){ storeAuthor(name.trim()); } return currentAuthor(); },
     getReadOnlyHTML:function(){ return serializeReadOnly(); },
     attachToHTML:attachToHTML,
-    getHTML:function(){ return serialize(); }   // 편집 흔적 제거된 자체완결 HTML 문자열
+    getHTML:function(){ return serialize(); },   // 편집 흔적 제거된 자체완결 HTML 문자열
+    notes:{
+      list:function(){ return JSON.parse(JSON.stringify(notes)); },
+      add:function(text,opts){ opts=opts||{}; var target=null; if(opts.range) target=targetFrom(opts.range); else if(opts.anchor) target=targetFrom(savedRange); var n=addNote(text,target); return n?n.id:null; },
+      reply:replyNote, resolve:resolveNote, remove:removeNote
+    }
   };
 })();
 
