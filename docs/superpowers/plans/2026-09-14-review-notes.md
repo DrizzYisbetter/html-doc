@@ -1332,13 +1332,12 @@ body.doc-notes-open #doc-inspector{ display:none; }
     return card;
   }
   function renderNotes(){
-    var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'), list=$('doc-notesList'), chk=$('doc-notesShowResolved'), showResolved=!!(chk&&chk.checked), shown=[], i, keep={}, draft=null, card, box, ta, state;
+    var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'), list=$('doc-notesList'), chk=$('doc-notesShowResolved'), showResolved=!!(chk&&chk.checked), shown=[], i, keep=Object.create(null), drafts=Object.create(null), card, box, ta, state;
     if(count) count.textContent=open?String(open):''; if(btn) btn.title=open?('미해결 메모 '+open+'개'):'메모 보기·남기기';
     showTarget();
     if(!list) return;
-    // 다시 그리기 전에 쓰다 만 답글과 카드의 펼침·선택 상태를 보존한다.
-    box=list.querySelector('.doc-ed-note-replybox:not([hidden])');
-    if(box){ card=box.closest('.doc-ed-note-card'); ta=box.querySelector('textarea'); draft={id:card?card.getAttribute('data-note-id'):'',text:ta?ta.value:''}; }
+    // 다시 그리기 전에 쓰다 만 답글(열린 상자 전부)과 카드의 펼침·선택 상태를 보존한다.
+    list.querySelectorAll('.doc-ed-note-replybox:not([hidden])').forEach(function(b){ var c=b.closest('.doc-ed-note-card'), t=b.querySelector('textarea'); if(c) drafts[c.getAttribute('data-note-id')]=t?t.value:''; });
     list.querySelectorAll('.doc-ed-note-card.open,.doc-ed-note-card.active').forEach(function(c){ keep[c.getAttribute('data-note-id')]=(c.classList.contains('open')?'o':'')+(c.classList.contains('active')?'a':''); });
     list.innerHTML='';
     for(i=0;i<notes.length;i++) if(showResolved||!notes[i].resolved) shown.push(notes[i]);
@@ -1346,7 +1345,7 @@ body.doc-notes-open #doc-inspector{ display:none; }
     for(i=0;i<shown.length;i++){
       card=noteCard(shown[i]); state=keep[shown[i].id]||'';
       if(state.indexOf('o')>=0) card.classList.add('open'); if(state.indexOf('a')>=0) card.classList.add('active');
-      if(draft&&draft.id===shown[i].id){ box=card.querySelector('.doc-ed-note-replybox'); box.hidden=false; box.querySelector('textarea').value=draft.text; }
+      if(shown[i].id in drafts){ box=card.querySelector('.doc-ed-note-replybox'); box.hidden=false; box.querySelector('textarea').value=drafts[shown[i].id]; }
       list.appendChild(card);
     }
   }
