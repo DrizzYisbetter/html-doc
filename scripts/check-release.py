@@ -46,7 +46,8 @@ def main():
     assert not re.search(r'^version:', front, re.M), 'Use metadata.version'
     subprocess.run([sys.executable, str(ROOT / 'assets/build-template.py'), '--check'], check=True)
     css = (ROOT / 'assets/doc-editor.css').read_text().strip()
-    js = ((ROOT / 'assets/doc-attach.js').read_text() + '\n' + (ROOT / 'assets/doc-editor.js').read_text()).strip()
+    js = ((ROOT / 'assets/doc-attach.js').read_text() + '\n' + (ROOT / 'assets/doc-diff.js').read_text()
+          + '\n' + (ROOT / 'assets/doc-editor.js').read_text()).strip()
     expected = ['doc-content', 'doc-controls', 'doc-editbar', 'doc-inspector', 'doc-editflag',
                 'doc-restore-banner', 'doc-history-modal', 'doc-toast', 'doc-history', 'doc-attachBtn', 'doc-exportBtn']
     for name in ['assets/skeleton.html', 'examples/demo.html']:
@@ -76,7 +77,7 @@ def main():
                 assert resolved.is_relative_to(ROOT) and resolved.exists(), f'Broken local link in {path.name}: {target}'
     node = shutil.which('node')
     if node:
-        for filename in ['doc-editor.js', 'doc-attach.js']:
+        for filename in ['doc-editor.js', 'doc-attach.js', 'doc-diff.js']:
             subprocess.run([node, '--check', str(ROOT / 'assets' / filename)], check=True)
     else:
         print('Node.js absent: JavaScript syntax checks skipped.')
