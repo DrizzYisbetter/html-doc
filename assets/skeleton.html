@@ -557,9 +557,160 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     return out.join('');
   }
 
-  /* ---------- DOM 함수 (Task 2에서 추가) ---------- */
+  /* ---------- DOM 함수 ---------- */
+  var BLOCK={address:1,article:1,aside:1,blockquote:1,caption:1,dd:1,details:1,div:1,dl:1,dt:1,fieldset:1,figcaption:1,figure:1,footer:1,form:1,h1:1,h2:1,h3:1,h4:1,h5:1,h6:1,header:1,hr:1,li:1,main:1,nav:1,ol:1,p:1,pre:1,section:1,summary:1,table:1,tbody:1,td:1,tfoot:1,th:1,thead:1,tr:1,ul:1};
+  var BLOCK_SELECTOR=Object.keys(BLOCK).join(',');
+  var NOTE_SELECTOR='mark.doc-ed-note';
+  function parse(html){var d=document.createElement('div');d.innerHTML=html;return d;}
+  function isBlock(n){return n.nodeType===1&&BLOCK[n.tagName.toLowerCase()]===1;}
+  function nodesBox(nodes){var box=document.createElement('div');for(var i=0;i<nodes.length;i++)box.appendChild(nodes[i].cloneNode(true));return box;}
+  function stripNotes(box){var marks=box.querySelectorAll(NOTE_SELECTOR),i,m,p;for(i=0;i<marks.length;i++){m=marks[i];p=m.parentNode;while(m.firstChild)p.insertBefore(m.firstChild,m);p.removeChild(m);}return box;}
+  function tagSig(html){return tokenize(html).filter(function(t){return tokKind(t)==='tag';}).join('');}
+  // 단위: 안에 블록이 없는 블록 요소(block) 또는 블록 사이의 인라인 조각(run). path는 부모 경로, start/end는 부모 childNodes 인덱스.
+  function makeUnit(type,tag,nodes,path,start,end){
+    var box=stripNotes(nodesBox(nodes)),text=normText(box.textContent),nhtml=normText(box.innerHTML);
+    return {type:type,tag:tag,nodes:nodes,path:path,start:start,end:end,text:text,nhtml:nhtml,tsig:tag+'|'+tagSig(nhtml),sig:text?tag+'|'+text:tag+'||'+nhtml};
+  }
+  function units(root){
+    var list=[];
+    function flushRun(parent,path,start,end){
+      var nodes=[],has=false,i,n;
+      for(i=start;i<=end;i++){n=parent.childNodes[i];nodes.push(n);if(n.nodeType===1||(n.nodeType===3&&normText(n.nodeValue)))has=true;}
+      if(has)list.push(makeUnit('run','run',nodes,path,start,end));
+    }
+    function walk(el,path){
+      var kids=el.childNodes,runStart=-1,i,n;
+      for(i=0;i<kids.length;i++){
+        n=kids[i];
+        if(isBlock(n)){
+          if(runStart>=0){flushRun(el,path,runStart,i-1);runStart=-1;}
+          if(n.querySelector(BLOCK_SELECTOR))walk(n,path.concat(i));
+          else list.push(makeUnit('block',n.tagName.toLowerCase(),[n],path,i,i));
+        }else if(runStart<0)runStart=i;
+      }
+      if(runStart>=0)flushRun(el,path,runStart,kids.length-1);
+    }
+    walk(root,[]);
+    return list;
+  }
+  function similarity(u1,u2){if(!u1.text&&!u2.text)return u1.tag===u2.tag?1:0;return dice(u1.text,u2.text);}
+  function classify(b,c){var t=b.text===c.text?'fmt':'mod';return {type:t,fmt:t==='fmt'||b.tsig!==c.tsig};}
+  // replace 영역: del을 순서대로 보며 유사도 0.5 이상인 첫 ins와 짝짓는다. 1:1이고 태그가 같으면 유사도와 무관하게 짝짓는다.
+  function pairRegion(dels,inss,ops){
+    var assign=[],j=0,ptr=0,d,k,found,cls;
+    for(d=0;d<dels.length;d++){
+      found=-1;
+      if(dels.length===1&&inss.length===1&&dels[0].tag===inss[0].tag)found=0;
+      else for(k=j;k<inss.length;k++){if(similarity(dels[d],inss[k])>=0.5){found=k;break;}}
+      assign.push(found);if(found>=0)j=found+1;
+    }
+    for(d=0;d<dels.length;d++){
+      k=assign[d];
+      if(k<0){ops.push({type:'del',b:dels[d]});continue;}
+      while(ptr<k)ops.push({type:'ins',c:inss[ptr++]});
+      cls=classify(dels[d],inss[k]);ops.push({type:cls.type,fmt:cls.fmt,b:dels[d],c:inss[k]});ptr=k+1;
+    }
+    while(ptr<inss.length)ops.push({type:'ins',c:inss[ptr++]});
+  }
+  function compare(baseHtml,curHtml){
+    var bRoot=parse(baseHtml),cRoot=parse(curHtml),bu=units(bRoot),cu=units(cRoot);
+    var ids=Object.create(null),next=0,ops=[],exceeded=false,i,dels,inss,raw;
+    function id(s){if(!(s in ids))ids[s]=next++;return ids[s];}
+    raw=myers(bu.map(function(u){return id(u.sig);}),cu.map(function(u){return id(u.sig);}),function(p,q){return p===q;},2000);
+    if(!raw){exceeded=true;raw=bu.map(function(u,idx){return {op:'del',a:idx};}).concat(cu.map(function(u,idx){return {op:'ins',b:idx};}));}
+    i=0;
+    while(i<raw.length){
+      if(raw[i].op==='eq'){
+        if(bu[raw[i].a].nhtml===cu[raw[i].b].nhtml)ops.push({type:'eq',b:bu[raw[i].a],c:cu[raw[i].b]});
+        else ops.push({type:'fmt',fmt:true,b:bu[raw[i].a],c:cu[raw[i].b]});
+        i++;continue;
+      }
+      dels=[];inss=[];
+      while(i<raw.length&&raw[i].op!=='eq'){if(raw[i].op==='del')dels.push(bu[raw[i].a]);else inss.push(cu[raw[i].b]);i++;}
+      if(exceeded){dels.forEach(function(u){ops.push({type:'del',b:u});});inss.forEach(function(u){ops.push({type:'ins',c:u});});}
+      else pairRegion(dels,inss,ops);
+    }
+    var counts={ins:0,del:0,mod:0,fmt:0};
+    ops.forEach(function(o){if(o.type!=='eq')counts[o.type]++;});
+    return {bRoot:bRoot,cRoot:cRoot,ops:ops,counts:counts,exceeded:exceeded,changes:[]};
+  }
+  function firstNode(u){return u.nodes[0];}
+  function lastNode(u){return u.nodes[u.nodes.length-1];}
+  function compatible(tag,parentTag){
+    if(tag==='td'||tag==='th')return parentTag==='tr';
+    if(tag==='li')return parentTag==='ul'||parentTag==='ol'||parentTag==='menu';
+    if(tag==='dt'||tag==='dd')return parentTag==='dl';
+    if(tag==='tr')return parentTag==='tbody'||parentTag==='thead'||parentTag==='tfoot'||parentTag==='table';
+    if(tag==='caption')return parentTag==='table';
+    return true;
+  }
+  function stripIds(el){if(el.nodeType!==1)return;el.removeAttribute('id');var all=el.querySelectorAll('[id]');for(var i=0;i<all.length;i++)all[i].removeAttribute('id');}
+  function wrapNodes(nodes,cls){var span=document.createElement('span');span.className='doc-ed-diff-run '+cls;nodes[0].parentNode.insertBefore(span,nodes[0]);for(var i=0;i<nodes.length;i++)span.appendChild(nodes[i]);return span;}
+  function markUnit(u,cls){if(u.type==='block'){u.nodes[0].classList.add(cls);return u.nodes[0];}return wrapNodes(u.nodes,cls);}
+  function innerOf(u){return u.type==='block'?u.nodes[0].innerHTML:nodesBox(u.nodes).innerHTML;}
+  function cloneDeleted(b,parentTag){
+    var el,i;
+    if(b.type==='block'&&compatible(b.tag,parentTag)){el=b.nodes[0].cloneNode(true);stripIds(el);el.classList.add('doc-ed-diff-del');return el;}
+    el=document.createElement(b.type==='block'?'div':'span');
+    el.className='doc-ed-diff-del '+(b.type==='block'?'doc-ed-diff-del-wrap':'doc-ed-diff-run');
+    if(b.type==='block'){el.setAttribute('data-doc-tag',b.tag);el.innerHTML=b.nodes[0].innerHTML;}
+    else for(i=0;i<b.nodes.length;i++)el.appendChild(b.nodes[i].cloneNode(true));
+    stripIds(el);return el;
+  }
+  // cRoot에 표식을 넣는다. 삭제 단위는 다음 C 단위 앞, 없으면 직전에 그린 노드 뒤, 없으면 root 끝에 복제해 넣는다.
+  function render(cmp){
+    var ops=cmp.ops,changes=[],cursor=null,i,o,el,next,parent,html,delEl,parentTag;
+    function nextC(from){for(var k=from+1;k<ops.length;k++)if(ops[k].c)return ops[k].c;return null;}
+    for(i=0;i<ops.length;i++){
+      o=ops[i];
+      if(o.type==='eq'){cursor=lastNode(o.c);continue;}
+      if(o.type==='del'){
+        next=nextC(i);
+        parent=next?firstNode(next).parentNode:(cursor?cursor.parentNode:cmp.cRoot);
+        parentTag=parent&&parent.nodeType===1&&parent!==cmp.cRoot?parent.tagName.toLowerCase():'';
+        el=cloneDeleted(o.b,parentTag);
+        if(next)parent.insertBefore(el,firstNode(next));else if(cursor)cursor.parentNode.insertBefore(el,cursor.nextSibling);else cmp.cRoot.appendChild(el);
+      }else if(o.type==='ins'){el=markUnit(o.c,'doc-ed-diff-ins');}
+      else if(o.type==='mod'){
+        html=wordDiff(innerOf(o.b),innerOf(o.c));
+        if(html===null){
+          parent=firstNode(o.c).parentNode;
+          delEl=cloneDeleted(o.b,parent!==cmp.cRoot?parent.tagName.toLowerCase():'');
+          parent.insertBefore(delEl,firstNode(o.c));delEl.setAttribute('data-doc-change',String(changes.length));
+          el=markUnit(o.c,'doc-ed-diff-ins');
+        }else if(o.c.type==='block'){el=o.c.nodes[0];el.innerHTML=html;el.classList.add('doc-ed-diff-mod');}
+        else{
+          el=document.createElement('span');el.className='doc-ed-diff-run doc-ed-diff-mod';el.innerHTML=html;
+          firstNode(o.c).parentNode.insertBefore(el,firstNode(o.c));
+          o.c.nodes.forEach(function(n){n.parentNode.removeChild(n);});
+        }
+        if(o.fmt)el.classList.add('doc-ed-diff-fmt');
+      }else{el=markUnit(o.c,'doc-ed-diff-fmt');}
+      el.setAttribute('data-doc-change',String(changes.length));
+      o.el=el;changes.push(o);cursor=el;
+    }
+    cmp.changes=changes;return changes;
+  }
+  function nodeAt(root,path){var n=root;for(var i=0;i<path.length;i++){n=n.childNodes[path[i]];if(!n)return null;}return n;}
+  function unitRange(root,u){var parent=nodeAt(root,u.path),nodes=[],i,n;if(!parent)return null;for(i=u.start;i<=u.end;i++){n=parent.childNodes[i];if(!n)return null;nodes.push(n);}return {parent:parent,nodes:nodes};}
+  function cloneNodes(u){return u.nodes.map(function(n){return n.cloneNode(true);});}
+  // 원본 모델(같은 문자열을 파싱한 div)에 변경 하나를 기준 쪽으로 되돌린다.
+  function revert(cmp,index,model){
+    var o=cmp.changes[index],r,i,k,ref,clones,at;
+    if(!o)return false;
+    if(o.type==='ins'){r=unitRange(model,o.c);if(!r)return false;r.nodes.forEach(function(n){r.parent.removeChild(n);});return true;}
+    if(o.type==='mod'||o.type==='fmt'){
+      r=unitRange(model,o.c);if(!r)return false;clones=cloneNodes(o.b);
+      for(i=0;i<clones.length;i++)r.parent.insertBefore(clones[i],r.nodes[0]);
+      r.nodes.forEach(function(n){r.parent.removeChild(n);});return true;
+    }
+    clones=cloneNodes(o.b);at=cmp.ops.indexOf(o);
+    for(k=at+1;k<cmp.ops.length;k++)if(cmp.ops[k].c){r=unitRange(model,cmp.ops[k].c);if(!r)return false;for(i=0;i<clones.length;i++)r.parent.insertBefore(clones[i],r.nodes[0]);return true;}
+    for(k=at-1;k>=0;k--)if(cmp.ops[k].c){r=unitRange(model,cmp.ops[k].c);if(!r)return false;ref=r.nodes[r.nodes.length-1].nextSibling;for(i=0;i<clones.length;i++)r.parent.insertBefore(clones[i],ref);return true;}
+    for(i=0;i<clones.length;i++)model.appendChild(clones[i]);return true;
+  }
 
-  global.DocEditorDiff={myers:myers,tokenize:tokenize,dice:dice,wordDiff:wordDiff,normText:normText};
+  global.DocEditorDiff={myers:myers,tokenize:tokenize,dice:dice,wordDiff:wordDiff,normText:normText,units:units,compare:compare,render:render,revert:revert};
 })(typeof window!=='undefined'?window:globalThis);
 
 /* ============================================================
