@@ -89,10 +89,11 @@ check('author: prompt once on first save and remembered', await page.evaluate(as
   await window.DocEditor.save(); await window.DocEditor.save();
   return window.__prompts===1 && localStorage.getItem('docedit:author')==='검토자' && window.DocEditor.author()==='검토자';
 }));
-check('provenance: saved-by/at and history author are written', await page.evaluate(()=>{
+check('provenance: saved-by/at and history author are written, export strips them', await page.evaluate(()=>{
   const docs=window.__writes.map(h=>new DOMParser().parseFromString(h,'text/html'));
   const b=docs[1].body, hist=JSON.parse(docs[1].getElementById('doc-history').textContent);
-  return docs.length===2 && b.dataset.docSavedBy==='검토자' && /^\d{4}-/.test(b.dataset.docSavedAt||'') && hist.length===1 && hist[0].author==='' && !!b.dataset.docId;
+  const ro=new DOMParser().parseFromString(window.DocEditor.getReadOnlyHTML(),'text/html').body;
+  return docs.length===2 && b.dataset.docSavedBy==='검토자' && /^\d{4}-/.test(b.dataset.docSavedAt||'') && hist.length===1 && hist[0].author==='' && !!b.dataset.docId && !ro.hasAttribute('data-doc-saved-by') && !ro.hasAttribute('data-doc-saved-at');
 }));
 check('backup: first save assigns id and drops the path-keyed backup', await page.evaluate(()=>{
   const pathKey='docedit:autosave:url:'+location.origin+location.pathname, idKey='docedit:autosave:'+document.body.dataset.docId;
