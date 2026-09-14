@@ -28,7 +28,8 @@
   function getContentHtml(){ return comparing?pristineHtml:content.innerHTML; }
   function sanitizeNotes(arr){
     if(!Array.isArray(arr)) return [];
-    return arr.filter(function(v){ return v && typeof v.id==='string' && typeof v.text==='string'; }).map(function(v){
+    var seen={};
+    return arr.filter(function(v){ if(!(v && typeof v.id==='string' && /^[A-Za-z0-9_-]+$/.test(v.id) && typeof v.text==='string') || seen[v.id]) return false; seen[v.id]=true; return true; }).map(function(v){
       return {id:v.id, author:typeof v.author==='string'?v.author:'', ts:typeof v.ts==='string'?v.ts:'', text:v.text, quote:typeof v.quote==='string'?v.quote:'', anchored:!!v.anchored, resolved:!!v.resolved,
         replies:Array.isArray(v.replies)?v.replies.filter(function(r){ return r && typeof r.text==='string'; }).map(function(r){ return {author:typeof r.author==='string'?r.author:'', ts:typeof r.ts==='string'?r.ts:'', text:r.text}; }):[]};
     });
@@ -116,12 +117,14 @@
   function unwrapMark(m){ var p=m.parentNode; while(m.firstChild) p.insertBefore(m.firstChild,m); p.removeChild(m); p.normalize(); }
   function unwrapMarks(id,root){ var marks=noteMarks(id,root); for(var i=0;i<marks.length;i++) unwrapMark(marks[i]); }
   // 선택 범위 안의 텍스트 노드를 같은 ID의 mark로 감싼다. 경계 텍스트는 잘라 선택한 부분만 감싼다.
+  // range는 live Range여야 한다. splitText 뒤 경계는 브라우저가 따라 움직이므로 자른 뒤에 다시 읽는다.
   function wrapRange(range,id){
-    var sc=range.startContainer, so=range.startOffset, ec=range.endContainer, eo=range.endOffset, r=document.createRange(), walker, nodes=[], t, i, m, rest;
-    if(ec.nodeType===3 && eo<ec.nodeValue.length) ec.splitText(eo);
-    if(sc.nodeType===3 && so>0){ rest=sc.splitText(so); if(ec===sc) ec=rest; sc=rest; so=0; }
-    if(sc.nodeType===3) r.setStart(sc,0); else r.setStart(sc,so);
-    if(ec.nodeType===3) r.setEnd(ec,ec.nodeValue.length); else r.setEnd(ec,eo);
+    var sc=range.startContainer, so=range.startOffset, ec=range.endContainer, eo=range.endOffset, r, walker, nodes=[], t, i, m;
+    if(ec.nodeType===3 && eo>0 && eo<ec.nodeValue.length) ec.splitText(eo);
+    if(sc.nodeType===3 && so>0 && so<sc.nodeValue.length) sc.splitText(so);
+    r=range.cloneRange();
+    if(r.startContainer.nodeType===3 && r.startOffset>=r.startContainer.nodeValue.length) r.setStartAfter(r.startContainer);
+    if(r.endContainer.nodeType===3 && r.endOffset===0) r.setEndBefore(r.endContainer);
     walker=document.createTreeWalker(content,NodeFilter.SHOW_TEXT,null);
     while((t=walker.nextNode())) if(r.intersectsNode(t)) nodes.push(t);
     while(nodes.length && !normText(nodes[0].nodeValue)) nodes.shift();
@@ -508,7 +511,7 @@
   /* ---------- 초기화 ---------- */
   try{ document.execCommand('styleWithCSS',false,true); }catch(e){}
   updateEditorLayout();
-  reconcileNotes(); renderNotes();
+  reconcileNotes(); renderNotes(); lastSavedHtml=content.innerHTML; lastBackedUpHtml=lastSavedHtml;
   checkAutosave();
   (function(){ var by=body.dataset.docSavedBy||''; if(by && by!==currentAuthor() && history.length) toast(by+'이(가) 저장한 문서입니다. 변경 사항으로 수정된 부분을 볼 수 있습니다.',6000); })();
 
