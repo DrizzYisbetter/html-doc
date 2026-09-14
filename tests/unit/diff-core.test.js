@@ -26,7 +26,7 @@ test('tokenize splits tags, words and whitespace', () => {
   assert.deepEqual(D.tokenize('<b>안녕</b> 세상  a'), ['<b>', '안녕', '</b>', ' ', '세상', '  ', 'a']);
 });
 test('normText collapses whitespace and nbsp', () => {
-  assert.equal(D.normText(' 하나  둘\n셋 '), '하나 둘 셋');
+  assert.equal(D.normText(' 하나  둘\n셋 '), '하나 둘 셋');
 });
 test('dice similarity', () => {
   assert.equal(D.dice('a b c', 'a b c'), 1);

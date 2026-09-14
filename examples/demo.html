@@ -685,7 +685,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   function tokenize(html){var re=/<[^>]*>|\s+|[^\s<]+/g,out=[],m;while((m=re.exec(html)))out.push(m[0]);return out;}
   function tokKind(t){return t.charCodeAt(0)===60?'tag':(/^\s+$/.test(t)?'ws':'word');}
   function tokKey(t){return tokKind(t)==='ws'?' ':t;}
-  function normText(s){return (s||'').replace(/ /g,' ').replace(/\s+/g,' ').trim();}
+  function normText(s){return (s||'').replace(/ /g,' ').replace(/\s+/g,' ').trim();}
   function dice(t1,t2){
     var a=t1?t1.split(' '):[],b=t2?t2.split(' '):[],bag={},inter=0,i;
     if(!a.length&&!b.length)return 1;
