@@ -49,12 +49,14 @@ await page.evaluate(() => localStorage.removeItem('docedit:autosave:url:'+locati
 await page.reload(); console.log((await snapshot(page, {interactive:true})).diff);
 // Save API mocks exercise serialization, cancellation and failed writes without overwriting files.
 check('save cancellation preserves history and identity', await page.evaluate(async () => {
+ window.prompt=()=>'QA';
  const before=window.DocEditor.getHTML();
  window.showSaveFilePicker=async () => {throw new DOMException('cancel','AbortError');};
  await window.DocEditor.save();
  return window.DocEditor.getHTML()===before;
 }));
 check('save then repeat does not duplicate history', await page.evaluate(async () => {
+ window.prompt=()=>'QA';
  window.__qaWrites=[];
  window.showSaveFilePicker=async () => ({name:'test.html', queryPermission:async ()=>'granted', createWritable:async () => ({write:async html=>window.__qaWrites.push(html),close:async()=>{}})});
  window.DocEditor.edit(true);
@@ -62,7 +64,7 @@ check('save then repeat does not duplicate history', await page.evaluate(async (
  document.getElementById('doc-content').dispatchEvent(new Event('input',{bubbles:true}));
  await window.DocEditor.save(); await window.DocEditor.save();
  const outputs=window.__qaWrites.map(h=>new DOMParser().parseFromString(h,'text/html'));
- return outputs.length===2 && outputs.every(d=>JSON.parse(d.getElementById('doc-history').textContent).length===1) && !document.body.dataset.docId;
+ return outputs.length===2 && outputs.every(d=>JSON.parse(d.getElementById('doc-history').textContent).length===1) && !!document.body.dataset.docId;
 }));
 check('save failure download updates baseline once', await page.evaluate(async () => {
  // Use an isolated frame to reset the previously chosen file handle.
@@ -71,6 +73,7 @@ check('save failure download updates baseline once', await page.evaluate(async (
  frame.srcdoc=source; document.body.appendChild(frame);
  await new Promise(resolve=>frame.onload=resolve);
  const w=frame.contentWindow, c=w.document.getElementById('doc-content');
+ w.prompt=()=>'QA';
  w.showSaveFilePicker=async()=>({name:'fail.html',createWritable:async()=>{throw new Error('disk');}});
  const downloads=[]; w.HTMLAnchorElement.prototype.click=function(){downloads.push(this.download);};
  c.innerHTML='<p>실패 후 다운로드</p>'; await w.DocEditor.save(); await w.DocEditor.save();

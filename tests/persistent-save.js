@@ -12,6 +12,7 @@ await page.evaluate(async()=>{
 });
 await page.reload();console.log((await snapshot(page,{interactive:true})).diff);
 check('first choice writes and persists native handle',await page.evaluate(async name=>{
+ window.prompt=()=>'QA';
  const root=await navigator.storage.getDirectory();const h=await root.getFileHandle(name,{create:true});
  let calls=0;window.showSaveFilePicker=async()=>{calls++;return h;};
  await window.DocEditor.save();await window.DocEditor.save();
@@ -21,6 +22,7 @@ check('first choice writes and persists native handle',await page.evaluate(async
 },names[0]));
 await closeTab(page);await openTab(url);console.log((await snapshot(page,{interactive:true})).tree);
 check('close and reopen reuses handle without picker',await page.evaluate(async name=>{
+ window.prompt=()=>'QA';
  let calls=0;window.showSaveFilePicker=async()=>{calls++;throw new Error('Unexpected picker');};
  document.getElementById('doc-content').innerHTML='<p>재열기 후 저장</p>';
  await window.DocEditor.save();
@@ -36,7 +38,7 @@ check('permission denial neither writes nor downloads',await page.evaluate(async
  proto.queryPermission=q;proto.requestPermission=r;HTMLAnchorElement.prototype.click=click;
  return asks===1 && downloads===0 && await(await h.getFile()).text()===before && document.getElementById('doc-toast').textContent.includes('허용되지');
 },names[0]));
-await page.evaluate(async name=>{const root=await navigator.storage.getDirectory();const h=await root.getFileHandle(name,{create:true});window.__qaPickerCalls=0;window.showSaveFilePicker=async()=>{window.__qaPickerCalls++;return h;};},names[1]);
+await page.evaluate(async name=>{window.prompt=()=>'QA';const root=await navigator.storage.getDirectory();const h=await root.getFileHandle(name,{create:true});window.__qaPickerCalls=0;window.showSaveFilePicker=async()=>{window.__qaPickerCalls++;return h;};},names[1]);
 await page.locator('#doc-saveAsBtn').click();console.log((await snapshot(page,{interactive:true})).diff);
 check('save as selects new file but preserves original path binding',await page.evaluate(async names=>{
  const root=await navigator.storage.getDirectory(),copy=await root.getFileHandle(names[1]);
@@ -47,6 +49,7 @@ check('save as selects new file but preserves original path binding',await page.
 },names));
 await page.reload();console.log((await snapshot(page,{interactive:true})).diff);
 check('deleted file detaches and next save allows a new choice',await page.evaluate(async names=>{
+ window.prompt=()=>'QA';
  const root=await navigator.storage.getDirectory();
  const proto=FileSystemFileHandle.prototype, writable=proto.createWritable;
  proto.createWritable=async function(){throw new DOMException('File removed','NotFoundError');};

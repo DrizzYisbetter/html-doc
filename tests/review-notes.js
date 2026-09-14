@@ -78,4 +78,47 @@ check('diff: exceeded budget falls back to whole replacement', await page.evalua
   const cmp=D.compare(a,b);
   return cmp.exceeded && cmp.counts.del===1200 && cmp.counts.ins===1200;
 }));
+
+// ---- B. 이름·출처·첫 저장 ID·백업 안전장치 ----
+await fresh();
+check('author: prompt once on first save and remembered', await page.evaluate(async()=>{
+  window.__writes=[];
+  window.showSaveFilePicker=async()=>({name:'t.html',queryPermission:async()=>'granted',createWritable:async()=>({write:async h=>window.__writes.push(h),close:async()=>{}})});
+  const c=document.getElementById('doc-content');
+  window.DocEditor.edit(true); c.innerHTML='<p>첫 저장</p>'; c.dispatchEvent(new Event('input',{bubbles:true}));
+  await window.DocEditor.save(); await window.DocEditor.save();
+  return window.__prompts===1 && localStorage.getItem('docedit:author')==='검토자' && window.DocEditor.author()==='검토자';
+}));
+check('provenance: saved-by/at and history author are written', await page.evaluate(()=>{
+  const docs=window.__writes.map(h=>new DOMParser().parseFromString(h,'text/html'));
+  const b=docs[1].body, hist=JSON.parse(docs[1].getElementById('doc-history').textContent);
+  return docs.length===2 && b.dataset.docSavedBy==='검토자' && /^\d{4}-/.test(b.dataset.docSavedAt||'') && hist.length===1 && hist[0].author==='' && !!b.dataset.docId;
+}));
+check('backup: first save assigns id and drops the path-keyed backup', await page.evaluate(()=>{
+  const pathKey='docedit:autosave:url:'+location.origin+location.pathname, idKey='docedit:autosave:'+document.body.dataset.docId;
+  const a=JSON.parse(localStorage.getItem(idKey));
+  return localStorage.getItem(pathKey)===null && a && a.savedBy==='검토자' && a.savedAt===document.body.dataset.docSavedAt && Array.isArray(a.notes) && typeof a.title==='string';
+}));
+check('author: API setter updates storage', await page.evaluate(()=>{ window.DocEditor.author('바뀐 이름'); return localStorage.getItem('docedit:author')==='바뀐 이름' && window.DocEditor.author()==='바뀐 이름'; }));
+await page.evaluate(()=>{ Object.keys(localStorage).filter(k=>k.startsWith('docedit:autosave:')).forEach(k=>localStorage.removeItem(k)); localStorage.setItem('docedit:autosave:url:'+location.origin+location.pathname, JSON.stringify({ts:new Date().toISOString(),html:'<p>다른 저장본에서 만든 백업</p>',title:'다른 문서',savedBy:'누군가',savedAt:'2026-01-01T00:00:00.000Z'})); });
+await page.reload(); await stub();
+check('backup: mismatched provenance shows the warning text', await page.evaluate(()=>{ const b=document.getElementById('doc-restore-banner'), m=b.querySelector('.msg').textContent; return b.classList.contains('show') && /다른 저장본에서 만든/.test(m) && /다른 문서/.test(m) && /누군가|저장 기록 없음/.test(m); }));
+check('backup: restore keeps the current body in history', await page.evaluate(()=>{
+  const before=document.getElementById('doc-content').innerHTML; document.getElementById('doc-rb-restore').click();
+  const hist=JSON.parse(new DOMParser().parseFromString(window.DocEditor.getHTML(),'text/html').getElementById('doc-history').textContent);
+  return document.getElementById('doc-content').innerHTML==='<p>다른 저장본에서 만든 백업</p>' && hist.length===1 && hist[0].html===before && /^복구 전: /.test(hist[0].title);
+}));
+check('history: modal lists author and time', await page.evaluate(()=>{ document.getElementById('doc-historyBtn').click(); const s=document.querySelector('#doc-hist-list .doc-ed-hist-item span'); const ok=!!s && /이름 없음/.test(s.textContent); document.getElementById('doc-hist-close').click(); return ok; }));
+await page.evaluate(()=>{ localStorage.setItem('docedit:autosave:url:'+location.origin+location.pathname, JSON.stringify({ts:new Date().toISOString(),html:'<p>같은 출처</p>',title:'같은 출처',savedBy:'',savedAt:''})); });
+await page.reload(); await stub();
+check('backup: matching provenance shows the normal prompt', await page.evaluate(()=>{ const m=document.querySelector('#doc-restore-banner .msg').textContent; return document.getElementById('doc-restore-banner').classList.contains('show') && /복구하시겠어요/.test(m) && /같은 출처/.test(m) && !/다른 저장본/.test(m); }));
+await page.evaluate(()=>localStorage.removeItem('docedit:autosave:url:'+location.origin+location.pathname));
+check('open hint: toast when the file was saved by someone else', await page.evaluate(async()=>{
+  let src=await (await fetch('/assets/skeleton.html')).text();
+  src=src.replace('<body>','<body data-doc-saved-by="김검토" data-doc-saved-at="2026-09-12T05:03:00.000Z">').replace('id="doc-history">[]','id="doc-history">[{"ts":"2026-09-11T00:00:00.000Z","title":"이전","html":"<p>이전</p>","author":"나"}]');
+  const f=document.createElement('iframe'); f.srcdoc=src; document.body.appendChild(f); await new Promise(r=>f.onload=r);
+  const t=f.contentDocument.getElementById('doc-toast').textContent; f.remove();
+  return /김검토/.test(t) && /변경 사항/.test(t);
+}));
+
 console.log(JSON.stringify({pass:true,count:results.length,results}));
