@@ -958,7 +958,7 @@ Expected: `FAIL: notes: anchored note wraps the selection ...` (`window.DocEdito
 ```js
   function sanitizeNotes(arr){
     if(!Array.isArray(arr)) return [];
-    var seen={};
+    var seen=Object.create(null);
     return arr.filter(function(v){ if(!(v && typeof v.id==='string' && /^[A-Za-z0-9_-]+$/.test(v.id) && typeof v.text==='string') || seen[v.id]) return false; seen[v.id]=true; return true; }).map(function(v){
       return {id:v.id, author:typeof v.author==='string'?v.author:'', ts:typeof v.ts==='string'?v.ts:'', text:v.text, quote:typeof v.quote==='string'?v.quote:'', anchored:!!v.anchored, resolved:!!v.resolved,
         replies:Array.isArray(v.replies)?v.replies.filter(function(r){ return r && typeof r.text==='string'; }).map(function(r){ return {author:typeof r.author==='string'?r.author:'', ts:typeof r.ts==='string'?r.ts:'', text:r.text}; }):[]};
@@ -1057,7 +1057,7 @@ Expected: `FAIL: notes: anchored note wraps the selection ...` (`window.DocEdito
     },
 ```
 
-(g) 초기화 블록의 `checkAutosave();` 앞에 `reconcileNotes(); renderNotes(); lastSavedHtml=content.innerHTML; lastBackedUpHtml=lastSavedHtml;`를 추가한다(열 때 고아 mark를 풀어 본문이 바뀌어도 저장 기준·백업 기준은 그 결과를 따른다).
+(g) 초기화 블록의 `checkAutosave();` 앞에 `reconcileNotes(); renderNotes(); lastSavedHtml=content.innerHTML; lastBackedUpHtml=lastSavedHtml; lastBackedUpNotes=JSON.stringify(notes);`를 추가한다(열 때 고아 mark를 풀어 본문이 바뀌어도 저장 기준·백업 기준은 그 결과를 따른다).
 
 - [ ] **Step 5: 재빌드 후 테스트**
 
