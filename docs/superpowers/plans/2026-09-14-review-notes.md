@@ -640,7 +640,7 @@ await page.reload(); await stub();
 check('backup: matching provenance shows the normal prompt', await page.evaluate(()=>{ const m=document.querySelector('#doc-restore-banner .msg').textContent; return document.getElementById('doc-restore-banner').classList.contains('show') && /복구하시겠어요/.test(m) && /같은 출처/.test(m) && !/다른 저장본/.test(m); }));
 await page.evaluate(()=>localStorage.removeItem('docedit:autosave:url:'+location.origin+location.pathname));
 check('open hint: toast when the file was saved by someone else', await page.evaluate(async()=>{
-  let src=await (await fetch('/assets/skeleton.html')).text();
+  let src=await (await fetch('/assets/skeleton.html',{cache:'no-store'})).text();
   src=src.replace('<body>','<body data-doc-saved-by="김검토" data-doc-saved-at="2026-09-12T05:03:00.000Z">').replace('id="doc-history">[]','id="doc-history">[{"ts":"2026-09-11T00:00:00.000Z","title":"이전","html":"<p>이전</p>","author":"나"}]');
   const f=document.createElement('iframe'); f.srcdoc=src; document.body.appendChild(f); await new Promise(r=>f.onload=r);
   const t=f.contentDocument.getElementById('doc-toast').textContent; f.remove();
@@ -1010,7 +1010,7 @@ Expected: `FAIL: notes: anchored note wraps the selection ...` (`window.DocEdito
   function removeNote(id){
     var i; for(i=0;i<notes.length;i++) if(notes[i].id===id) break; if(i>=notes.length) return false;
     notes.splice(i,1); unwrapMarks(id,content);
-    if(comparing){ var model=document.createElement('div'); model.innerHTML=pristineHtml; unwrapMarks(id,model); pristineHtml=model.innerHTML; }
+    if(comparing){ var model=document.createElement('div'); model.innerHTML=pristineHtml; unwrapMarks(id,model); pristineHtml=model.innerHTML; renderCompare(); }
     afterNotesChange(); return true;
   }
   function openCount(){ var n=0; for(var i=0;i<notes.length;i++) if(!notes[i].resolved) n++; return n; }
@@ -1332,7 +1332,7 @@ body.doc-notes-open #doc-inspector{ display:none; }
     return card;
   }
   function renderNotes(){
-    var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'), list=$('doc-notesList'), chk=$('doc-notesShowResolved'), showResolved=!!(chk&&chk.checked), shown=[], i, keep=Object.create(null), drafts=Object.create(null), card, box, ta, state;
+    var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'), list=$('doc-notesList'), chk=$('doc-notesShowResolved'), showResolved=!!(chk&&chk.checked), shown=[], i, keep=Object.create(null), drafts=Object.create(null), card, box, state;
     if(count) count.textContent=open?String(open):''; if(btn) btn.title=open?('미해결 메모 '+open+'개'):'메모 보기·남기기';
     showTarget();
     if(!list) return;
@@ -1457,7 +1457,7 @@ check('compare: revert each change type through the API', await page.evaluate(()
   const cur='<p>하나 넷 셋</p><p style="text-align:center">정렬</p><p>새 문단</p>';
   // history[0]를 base로 만들기 위해 프레임을 쓴다.
   return (async()=>{
-    let src=await (await fetch('/assets/skeleton.html')).text();
+    let src=await (await fetch('/assets/skeleton.html',{cache:'no-store'})).text();
     src=src.replace('id="doc-history">[]','id="doc-history">[{"ts":"2026-09-11T00:00:00.000Z","title":"기준","html":"'+base.replace(/"/g,'\\"').replace(/</g,'\\u003c')+'","author":"작성자"}]');
     const f=document.createElement('iframe'); f.srcdoc=src; document.body.appendChild(f); await new Promise(r=>f.onload=r);
     const w=f.contentWindow, d=w.document, cc=d.getElementById('doc-content'); cc.innerHTML=cur;
@@ -1482,6 +1482,31 @@ check('compare: notes cannot be added while comparing but replies work', await p
   window.DocEditor.compare(false);
   return blocked && kept && replied && window.DocEditor.notes.list()[0].replies.length===1 && !!c.querySelector('mark[data-doc-note="'+id+'"]');
 }));
+check('compare: removing a note while comparing keeps revert accurate', await page.evaluate(async()=>{
+  let src=await (await fetch('/assets/skeleton.html',{cache:'no-store'})).text();
+  const base='<p>하나 둘 셋</p>앞 외톨이 뒤<p>둘째 문단</p>';
+  src=src.replace('id="doc-history">[]','id="doc-history">[{"ts":"2026-09-11T00:00:00.000Z","title":"기준","html":"'+base.replace(/"/g,'\\"').replace(/</g,'\\u003c')+'","author":"작성자"}]');
+  const f=document.createElement('iframe'); f.srcdoc=src; document.body.appendChild(f); await new Promise(r=>f.onload=r);
+  const w=f.contentWindow, d=w.document, cc=d.getElementById('doc-content'); w.prompt=()=>'검토자';
+  cc.innerHTML='<p>하나 둘 셋</p>앞 외톨이 뒤<p>둘째 문장</p>';
+  const r=d.createRange(); r.setStart(cc.childNodes[1],2); r.setEnd(cc.childNodes[1],5);
+  const id=w.DocEditor.notes.add('외톨이 메모',{range:r});
+  w.DocEditor.compareWith('history',0);
+  const before=w.DocEditor.changes().total;
+  w.DocEditor.notes.remove(id);
+  const ok=w.DocEditor.revertChange(0);
+  w.DocEditor.compare(false); const body=cc.innerHTML; f.remove();
+  return before===1 && ok && body===base;
+}));
+check('compare: Escape and history restore close the comparison', await page.evaluate(()=>{
+  const c=document.getElementById('doc-content'); c.innerHTML='<p>하나</p><p>둘</p>';
+  window.DocEditor.compareWith('session'); const on1=window.DocEditor.isComparing();
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); const off1=!window.DocEditor.isComparing() && c.innerHTML==='<p>하나</p><p>둘</p>';
+  window.DocEditor.compareWith('session'); document.getElementById('doc-historyBtn').click();
+  const item=document.querySelector('#doc-hist-list .doc-ed-hist-item'); if(!item) return false; item.click();
+  document.querySelector('#doc-hist-preview .doc-ed-btn.primary').click();
+  return on1 && off1 && !window.DocEditor.isComparing() && !document.querySelector('#doc-content [data-doc-change]') && !document.body.classList.contains('doc-changes');
+}));
 await page.evaluate(()=>{ window.DocEditor.notes.list().forEach(n=>window.DocEditor.notes.remove(n.id)); Object.keys(localStorage).filter(k=>k.startsWith('docedit:autosave:')).forEach(k=>localStorage.removeItem(k)); });
 ```
 
@@ -1501,6 +1526,7 @@ Expected: `FAIL: compare: session baseline ...` (`window.DocEditor.compare is no
   function baselineCandidates(){
     var list=[], cur=getContentHtml();
     if(cur!==lastSavedHtml) list.push({kind:'session',label:'마지막 저장 이후 (미저장 수정)',html:lastSavedHtml});
+    else if(baseline&&baseline.kind==='session') list.push(baseline);
     history.forEach(function(h,i){ list.push({kind:'history',index:i,label:(h.author||'이름 없음')+' · '+fmtTs(h.ts)+' · '+h.title,html:h.html}); });
     if(fileBaseline) list.push(fileBaseline);
     return list;
@@ -1530,6 +1556,7 @@ Expected: `FAIL: compare: session baseline ...` (`window.DocEditor.compare is no
   }
   function stepChange(dir){ var total=changeTotal(); if(!total) return; selectChange(((changeIndex<0?(dir>0?-1:0):changeIndex)+dir+total)%total,true); }
   function renderCompare(){
+    if(!comparing) return;
     var summary=$('doc-changesSummary'), n, total;
     if(!baseline){ content.innerHTML=pristineHtml; cmp=null; changeIndex=-1; if(summary) summary.textContent='비교할 저장본이 없습니다. 파일을 선택해 비교할 수 있습니다.'; updateChangeButtons(); reconcileNotes(); return; }
     cmp=window.DocEditorDiff.compare(baseline.html,pristineHtml);
@@ -1542,7 +1569,7 @@ Expected: `FAIL: compare: session baseline ...` (`window.DocEditor.compare is no
     reconcileNotes();
   }
   function baselineValue(b){ return b.kind==='history'?('history:'+b.index):b.kind; }
-  function useBaseline(b){ baseline=b; var sel=$('doc-changesBase'); if(sel&&b) sel.value=baselineValue(b); renderCompare(); }
+  function useBaseline(b){ if(!comparing) return; baseline=b; var sel=$('doc-changesBase'); if(sel&&b) sel.value=baselineValue(b); renderCompare(); }
   function setCompare(on){
     if(on){
       if(comparing) return;
@@ -1568,7 +1595,7 @@ Expected: `FAIL: compare: session baseline ...` (`window.DocEditor.compare is no
   }
   function revertChange(i){
     if(!comparing||!cmp) return false;
-    if(typeof i==='number') changeIndex=i;
+    if(typeof i==='number'){ if(i<0||i>=cmp.changes.length) return false; changeIndex=i; }
     if(changeIndex<0||changeIndex>=cmp.changes.length) return false;
     var model=document.createElement('div'); model.innerHTML=pristineHtml;
     if(!window.DocEditorDiff.revert(cmp,changeIndex,model)){ toast('되돌리지 못했습니다.'); return false; }
@@ -1614,9 +1641,9 @@ Expected: `FAIL: compare: session baseline ...` (`window.DocEditor.compare is no
 
 그리고 `if(editing) body.style.paddingTop=(originalPaddingPixels+bottom)+'px';`를 `if(editing||comparing) body.style.paddingTop=(originalPaddingPixels+bottom)+'px';`로 바꾼다. ResizeObserver 대상 배열 `['doc-controls','doc-editbar']`에 `'doc-changes-bar'`를 추가한다.
 
-(d) `serialize()`의 `var clone=document.documentElement.cloneNode(true);`를 `var clone=withPristine(function(){ return document.documentElement.cloneNode(true); });`로 바꾼다. `serializeReadOnly()`의 같은 줄도 동일하게 바꾸고, 표 스타일 판정 `if(content.querySelector('.doc-ed-tablewrap,table.doc-ed-table'))`을 `if(/doc-ed-tablewrap|doc-ed-table/.test(getContentHtml()))`로 바꾼다.
+(d) `serialize()`의 `var clone=document.documentElement.cloneNode(true);`를 `var clone=withPristine(function(){ return document.documentElement.cloneNode(true); });`로 바꾼다. `serializeReadOnly()`의 같은 줄도 동일하게 바꾸고, 표 스타일 판정 `if(content.querySelector('.doc-ed-tablewrap,table.doc-ed-table'))`을 `if(/class="[^"]*doc-ed-table/.test(getContentHtml()))`로 바꾼다.
 
-(e) `restoreHistory(i)` 첫 줄에 `if(comparing) setCompare(false);`를 추가한다. `checkAutosave` 안 `rb.onclick=function(){` 첫 줄에도 `if(comparing) setCompare(false);`를 추가한다.
+(e) `restoreHistory(i)` 첫 줄에 `if(comparing) setCompare(false);`를 추가한다. `checkAutosave` 안 `rb.onclick=function(){` 첫 줄에도 `if(comparing) setCompare(false);`를 추가한다. `saveToFile`의 `lastSavedHtml=savedHtml;` 다음 줄에 `if(comparing) fillBaseOptions();`를 추가한다(비교 중 저장하면 기준 목록을 갱신한다).
 
 (f) 바 이벤트 연결(요소가 없으면 `bind`가 무시한다). 버튼/단축키 블록에 추가:
 
@@ -1653,7 +1680,7 @@ Expected: `FAIL: compare: session baseline ...` (`window.DocEditor.compare is no
 - [ ] **Step 4: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && node --check assets/doc-editor.js && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":45`.
+Expected: `"pass":true,"count":47`.
 
 - [ ] **Step 5: 커밋**
 
@@ -1683,7 +1710,7 @@ git commit -m "비교 모드: 기준 선택·렌더·원본 문자열 보호·�
 // ---- D2. 비교 바 UI ----
 await fresh();
 check('compare ui: bar summary, baseline select, navigation, revert, close', await page.evaluate(async()=>{
-  let src=await (await fetch('/assets/skeleton.html')).text();
+  let src=await (await fetch('/assets/skeleton.html',{cache:'no-store'})).text();
   const base='<p>하나 둘 셋</p><p>지울 문단</p><p style="text-align:left">정렬</p>';
   src=src.replace('id="doc-history">[]','id="doc-history">[{"ts":"2026-09-11T00:00:00.000Z","title":"기준","html":"'+base.replace(/"/g,'\\"').replace(/</g,'\\u003c')+'","author":"작성자"}]');
   const f=document.createElement('iframe'); f.style.cssText='width:1280px;height:900px'; f.srcdoc=src; document.body.appendChild(f); await new Promise(r=>f.onload=r);
@@ -1724,7 +1751,7 @@ check('compare ui: clicking a change selects it and Escape closes', await page.e
 }));
 // ---- E. 반응형 ----
 check('responsive: notes panel and changes bar fit narrow screens', await page.evaluate(async()=>{
-  const source=await (await fetch('/examples/demo.html')).text(), out=[];
+  const source=await (await fetch('/examples/demo.html',{cache:'no-store'})).text(), out=[];
   for(const [width,height] of [[320,640],[390,844],[768,1024]]){
     const f=document.createElement('iframe'); f.style.cssText=`position:fixed;left:0;top:0;width:${width}px;height:${height}px;z-index:2147483647;background:#fff;border:0`;
     const loaded=new Promise(r=>f.onload=r); f.srcdoc=source.replace('<body>','<body data-doc-id="qa-review-'+width+'">'); document.body.appendChild(f); await loaded;
@@ -1753,7 +1780,7 @@ check('responsive: notes panel and changes bar fit narrow screens', await page.e
   return out.every(o=>o.rowOk&&o.panelOk&&o.editOk&&o.editPanelOk&&o.barOk);
 }));
 check('responsive: desktop panel sits below the controls and the bar avoids them', await page.evaluate(async()=>{
-  const source=await (await fetch('/examples/demo.html')).text();
+  const source=await (await fetch('/examples/demo.html',{cache:'no-store'})).text();
   const f=document.createElement('iframe'); f.style.cssText='position:fixed;left:0;top:0;width:1280px;height:900px;z-index:2147483647;background:#fff;border:0';
   const loaded=new Promise(r=>f.onload=r); f.srcdoc=source.replace('<body>','<body data-doc-id="qa-review-desktop">'); document.body.appendChild(f); await loaded;
   const w=f.contentWindow, d=w.document, settle=()=>new Promise(r=>w.requestAnimationFrame(()=>w.requestAnimationFrame(r)));
@@ -1847,7 +1874,7 @@ body.doc-changes #doc-content [data-doc-change]{ cursor:pointer; }
 - [ ] **Step 5: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":50`.
+Expected: `"pass":true,"count":52`.
 
 - [ ] **Step 6: 커밋**
 
