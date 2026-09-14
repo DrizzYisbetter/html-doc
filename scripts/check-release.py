@@ -65,7 +65,8 @@ def main():
     bundle = json.loads(tool.blocks['editor-bundle'])
     assert bundle['js'].strip() == js and bundle['css'].strip() == css, 'Tool bundle mismatch'
     for path in ROOT.rglob('*'):
-        if not path.is_file() or '.git' in path.parts:
+        rel = path.relative_to(ROOT)
+        if not path.is_file() or any(part.startswith('.') and part != '.gitignore' for part in rel.parts):
             continue
         assert not path.is_symlink(), f'Unexpected symlink: {path.relative_to(ROOT)}'
         if path.suffix in ('.md', '.py', '.js', '.css', '.html'):

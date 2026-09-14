@@ -49,6 +49,7 @@ body{ margin:0; font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans
 .doc-ed-btn.primary{ background:var(--doc-ed-accent,#2563eb); color:#fff; border-color:var(--doc-ed-accent,#2563eb); }
 .doc-ed-btn.primary:hover{ background:var(--doc-ed-accent-deep,#1d4ed8); }
 .doc-ed-btn.ghost{ background:var(--doc-ed-paper,#fff); box-shadow:none; }
+.doc-ed-btn.ghost.on{ background:var(--doc-ed-accent,#2563eb); color:#fff; border-color:var(--doc-ed-accent,#2563eb); }
 
 /* ---------- 편집 툴바 (편집 모드에서만) ---------- */
 #doc-editbar{
@@ -1056,10 +1057,10 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     var card=document.createElement('article'), orphan=n.anchored&&!noteHasAnchor(n.id), where;
     card.className='doc-ed-note-card'+(n.resolved?' resolved':''); card.setAttribute('data-note-id',n.id);
     where=n.anchored?(orphan?'<span class="doc-ed-note-badge">위치 없음</span> ':''):'<span class="doc-ed-note-badge">문서 전체</span>';
-    card.innerHTML='<div class="doc-ed-note-head"><strong>'+escapeHtml(n.author||'이름 없음')+'</strong><span>'+fmtTs(n.ts)+'</span>'+(n.resolved?'<span class="doc-ed-note-badge ok">해결됨</span>':'')+'</div>'
+    card.innerHTML='<div class="doc-ed-note-head"><strong>'+escapeHtml(n.author||'이름 없음')+'</strong><span>'+escapeHtml(fmtTs(n.ts))+'</span>'+(n.resolved?'<span class="doc-ed-note-badge ok">해결됨</span>':'')+'</div>'
       +'<div class="doc-ed-note-where">'+where+(n.quote?'<q>'+escapeHtml(n.quote)+'</q>':'')+'</div>'
       +'<div class="doc-ed-note-text">'+escapeHtml(n.text)+'</div>'
-      +(n.replies.length?'<div class="doc-ed-note-replies">'+n.replies.map(function(r){ return '<div class="doc-ed-note-reply"><strong>'+escapeHtml(r.author||'이름 없음')+'</strong><span>'+fmtTs(r.ts)+'</span><div>'+escapeHtml(r.text)+'</div></div>'; }).join('')+'</div>':'')
+      +(n.replies.length?'<div class="doc-ed-note-replies">'+n.replies.map(function(r){ return '<div class="doc-ed-note-reply"><strong>'+escapeHtml(r.author||'이름 없음')+'</strong><span>'+escapeHtml(fmtTs(r.ts))+'</span><div>'+escapeHtml(r.text)+'</div></div>'; }).join('')+'</div>':'')
       +'<div class="doc-ed-note-actions"><button type="button" class="doc-ed-btn" data-act="reply">답글</button><button type="button" class="doc-ed-btn" data-act="resolve">'+(n.resolved?'다시 열기':'해결')+'</button><button type="button" class="doc-ed-btn ghost" data-act="remove">삭제</button></div>'
       +'<div class="doc-ed-note-replybox" hidden><textarea rows="2" placeholder="답글"></textarea><button type="button" class="doc-ed-btn primary" data-act="send">남기기</button></div>';
     return card;
@@ -1476,7 +1477,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   function openHistory(){
     var list=$('doc-hist-list'); if(!list) return; list.innerHTML='';
     if(!history.length){ list.innerHTML='<p class="doc-ed-muted" style="font-size:13px">저장 히스토리가 없습니다.<br>저장하면 직전 내용이 쌓입니다.</p>'; }
-    history.forEach(function(h,i){ var b=document.createElement('button'); b.className='doc-ed-hist-item'; b.innerHTML='<strong>'+escapeHtml(h.title)+'</strong><span>'+escapeHtml(h.author||'이름 없음')+' · '+fmtTs(h.ts)+'</span>'; b.onclick=function(){ previewHistory(i); }; list.appendChild(b); });
+    history.forEach(function(h,i){ var b=document.createElement('button'); b.className='doc-ed-hist-item'; b.innerHTML='<strong>'+escapeHtml(h.title)+'</strong><span>'+escapeHtml(h.author||'이름 없음')+' · '+escapeHtml(fmtTs(h.ts))+'</span>'; b.onclick=function(){ previewHistory(i); }; list.appendChild(b); });
     var pv=$('doc-hist-preview'); if(pv) pv.innerHTML='<p class="doc-ed-muted" style="font-size:13px">왼쪽에서 버전을 선택하면 미리보기가 표시됩니다.</p>';
     var m=$('doc-history-modal'); if(m) m.classList.add('open');
   }

@@ -49,7 +49,7 @@ for name in ['browser-regression', 'persistent-save', 'mobile-layout',
 
 Run them sequentially: the tests change test-origin backups and IndexedDB. If the port is occupied, select another dedicated port and update all test URLs. No private reports or external QA aliases are required.
 
-Coverage: restoration and history (16 checks), file-handle persistence (5), responsive layout and formatting (94), read-only export on the bundled skeleton/demo (16), attachment and encoding (34).
+Coverage: restoration and history (16 checks), file-handle persistence (5), responsive layout and formatting (94), read-only export on the bundled skeleton/demo (18), attachment and encoding (37), review tools (52).
 
 `review-notes.js` covers the diff engine, author prompt, provenance, backup safety, notes (API and panel), comparison mode (API and bar), and narrow layouts. Stub `window.prompt` in any new browser test that saves or adds notes. Pure diff functions also have Node tests:
 
