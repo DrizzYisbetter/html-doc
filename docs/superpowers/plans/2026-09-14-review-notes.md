@@ -1140,7 +1140,27 @@ check('notes ui: a note that lost its mark shows a badge', await page.evaluate((
   return /위치 없음/.test(document.querySelector('#doc-notesList .doc-ed-note-card').textContent);
 }));
 check('notes ui: name field shows and stores the author', await page.evaluate(()=>{ const i=document.getElementById('doc-notesAuthor'), shown=i.value==='검토자'; i.value='새 이름'; i.dispatchEvent(new Event('change')); return shown && localStorage.getItem('docedit:author')==='새 이름'; }));
-check('notes ui: saved html has no open panel state or typed text', await page.evaluate(()=>{ document.getElementById('doc-notesInput').value='임시'; const d=new DOMParser().parseFromString(window.DocEditor.getHTML(),'text/html'); return !d.body.classList.contains('doc-notes-open') && d.getElementById('doc-notesList').innerHTML==='' && d.getElementById('doc-notesInput').textContent==='' && !d.getElementById('doc-notesAuthor').hasAttribute('value') && d.getElementById('doc-notesBtn').getAttribute('aria-expanded')==='false'; }));
+check('notes ui: saved html has no open panel state or typed text', await page.evaluate(()=>{ document.getElementById('doc-notesInput').value='임시'; const d=new DOMParser().parseFromString(window.DocEditor.getHTML(),'text/html'), ro=new DOMParser().parseFromString(window.DocEditor.getReadOnlyHTML(),'text/html'); return !d.body.classList.contains('doc-notes-open') && d.getElementById('doc-notesList').innerHTML==='' && d.getElementById('doc-notesInput').textContent==='' && !d.getElementById('doc-notesAuthor').hasAttribute('value') && d.getElementById('doc-notesBtn').getAttribute('aria-expanded')==='false' && !d.getElementById('doc-notesBtn').classList.contains('on') && !ro.body.classList.contains('doc-notes-open'); }));
+check('notes ui: toolbar button opens the panel and Escape closes it', await page.evaluate(()=>{
+  window.DocEditor.edit(true); document.getElementById('doc-ebNote').click();
+  const opened=document.body.classList.contains('doc-notes-open') && document.activeElement===document.getElementById('doc-notesInput') && document.getElementById('doc-notesBtn').classList.contains('on');
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  const closed=!document.body.classList.contains('doc-notes-open') && !document.getElementById('doc-notesBtn').classList.contains('on');
+  window.DocEditor.edit(false); return opened && closed;
+}));
+check('notes ui: a half-typed reply survives another card changing', await page.evaluate(()=>{
+  const a=window.DocEditor.notes.add('첫 메모'), b=window.DocEditor.notes.add('둘째 메모');
+  document.getElementById('doc-notesBtn').click();
+  const list=document.getElementById('doc-notesList'), cardA=list.querySelector('[data-note-id="'+a+'"]'), cardB=list.querySelector('[data-note-id="'+b+'"]');
+  cardA.querySelector('[data-act="reply"]').click(); cardA.querySelector('.doc-ed-note-replybox textarea').value='쓰다 만 답글';
+  cardB.querySelector('[data-act="resolve"]').click();
+  const after=list.querySelector('[data-note-id="'+a+'"] .doc-ed-note-replybox');
+  const kept=!!after && !after.hidden && after.querySelector('textarea').value==='쓰다 만 답글';
+  after.querySelector('[data-act="send"]').click();
+  const sent=window.DocEditor.notes.list().find(n=>n.id===a).replies.length===1 && list.querySelector('[data-note-id="'+a+'"] .doc-ed-note-replybox').hidden;
+  window.DocEditor.notes.remove(a); window.DocEditor.notes.remove(b);
+  return kept && sent;
+}));
 await page.evaluate(()=>{ document.getElementById('doc-notesInput').value=''; document.getElementById('doc-notesClose').click(); window.DocEditor.notes.list().forEach(n=>window.DocEditor.notes.remove(n.id)); localStorage.removeItem('docedit:autosave:url:'+location.origin+location.pathname); });
 ```
 
@@ -1269,14 +1289,15 @@ body.doc-notes-open #doc-inspector{ display:none; }
 
 ```js
   /* ---------- 메모 패널 ---------- */
+  var targetCleared=false;
   function setNotes(on){
     body.classList.toggle('doc-notes-open',on);
-    var t=$('doc-notesBtn'); if(t) t.setAttribute('aria-expanded',String(on));
+    var t=$('doc-notesBtn'); if(t){ t.setAttribute('aria-expanded',String(on)); t.classList.toggle('on',on); }
     if(on){ setInspector(false); setMore(false); captureTarget(); renderNotes(); }
   }
-  // 작성 상자에 포커스가 올 때의 본문 선택을 메모 대상으로 잡는다. 선택이 없으면 문서 전체.
-  function captureTarget(){ noteTarget=comparing?null:targetFrom(savedRange); showTarget(); }
-  function clearTarget(){ noteTarget=null; showTarget(); }
+  // 작성 상자에 포커스가 올 때의 본문 선택을 메모 대상으로 잡는다. 선택이 없거나 ×로 지웠으면 문서 전체. 새로 선택하면 다시 잡는다.
+  function captureTarget(){ noteTarget=(comparing||targetCleared)?null:targetFrom(savedRange); showTarget(); }
+  function clearTarget(){ noteTarget=null; targetCleared=true; showTarget(); }
   function showTarget(){
     var t=$('doc-notesTarget'), hint=$('doc-notesHint'), input=$('doc-notesInput'), add=$('doc-notesAdd'), q, x;
     if(t){ q=t.querySelector('.q'); x=$('doc-notesTargetClear'); t.classList.toggle('has',!!noteTarget); if(q) q.textContent=noteTarget?('“'+noteTarget.quote+'”'):'문서 전체'; if(x) x.hidden=!noteTarget; }
@@ -1311,20 +1332,30 @@ body.doc-notes-open #doc-inspector{ display:none; }
     return card;
   }
   function renderNotes(){
-    var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'), list=$('doc-notesList'), chk=$('doc-notesShowResolved'), showResolved=!!(chk&&chk.checked), shown=[], i;
+    var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'), list=$('doc-notesList'), chk=$('doc-notesShowResolved'), showResolved=!!(chk&&chk.checked), shown=[], i, keep={}, draft=null, card, box, ta, state;
     if(count) count.textContent=open?String(open):''; if(btn) btn.title=open?('미해결 메모 '+open+'개'):'메모 보기·남기기';
     showTarget();
-    if(!list) return; list.innerHTML='';
+    if(!list) return;
+    // 다시 그리기 전에 쓰다 만 답글과 카드의 펼침·선택 상태를 보존한다.
+    box=list.querySelector('.doc-ed-note-replybox:not([hidden])');
+    if(box){ card=box.closest('.doc-ed-note-card'); ta=box.querySelector('textarea'); draft={id:card?card.getAttribute('data-note-id'):'',text:ta?ta.value:''}; }
+    list.querySelectorAll('.doc-ed-note-card.open,.doc-ed-note-card.active').forEach(function(c){ keep[c.getAttribute('data-note-id')]=(c.classList.contains('open')?'o':'')+(c.classList.contains('active')?'a':''); });
+    list.innerHTML='';
     for(i=0;i<notes.length;i++) if(showResolved||!notes[i].resolved) shown.push(notes[i]);
     if(!shown.length){ list.innerHTML='<p class="doc-ed-muted" style="font-size:13px;margin:6px 4px">'+(notes.length?'해결되지 않은 메모가 없습니다.':'메모가 없습니다. 본문을 선택하고 위에 남겨 보세요.')+'</p>'; return; }
-    for(i=0;i<shown.length;i++) list.appendChild(noteCard(shown[i]));
+    for(i=0;i<shown.length;i++){
+      card=noteCard(shown[i]); state=keep[shown[i].id]||'';
+      if(state.indexOf('o')>=0) card.classList.add('open'); if(state.indexOf('a')>=0) card.classList.add('active');
+      if(draft&&draft.id===shown[i].id){ box=card.querySelector('.doc-ed-note-replybox'); box.hidden=false; box.querySelector('textarea').value=draft.text; }
+      list.appendChild(card);
+    }
   }
   bind('doc-notesBtn','click',function(){ setNotes(!body.classList.contains('doc-notes-open')); });
   bind('doc-notesClose','click',function(){ setNotes(false); var t=$('doc-notesBtn'); if(t) t.focus(); });
   bind('doc-ebNote','click',function(){ setNotes(true); var input=$('doc-notesInput'); if(input && !input.disabled) input.focus(); });
   bind('doc-notesInput','focus',captureTarget);
   bind('doc-notesTargetClear','click',clearTarget);
-  bind('doc-notesAdd','click',function(){ var input=$('doc-notesInput'); if(!input) return; var n=addNote(input.value,noteTarget); if(n){ input.value=''; noteTarget=null; showTarget(); highlightCard(n.id); } });
+  bind('doc-notesAdd','click',function(){ var input=$('doc-notesInput'); if(!input) return; if(!normText(input.value)){ toast('메모 내용을 입력해 주세요.'); return; } var n=addNote(input.value,noteTarget); if(n){ input.value=''; noteTarget=null; targetCleared=false; showTarget(); highlightCard(n.id); } });
   bind('doc-notesShowResolved','change',renderNotes);
   bind('doc-notesAuthor','change',function(){ storeAuthor(this.value.trim()); });
   (function(){
@@ -1336,7 +1367,7 @@ body.doc-notes-open #doc-inspector{ display:none; }
       if(!act){ if(e.target.closest('textarea')) return; card.classList.toggle('open'); locateNote(id); return; }
       a=act.getAttribute('data-act');
       if(a==='reply'){ box=card.querySelector('.doc-ed-note-replybox'); box.hidden=!box.hidden; if(!box.hidden) box.querySelector('textarea').focus(); }
-      else if(a==='send'){ ta=card.querySelector('.doc-ed-note-replybox textarea'); if(replyNote(id,ta.value)) highlightCard(id); }
+      else if(a==='send'){ box=card.querySelector('.doc-ed-note-replybox'); ta=box.querySelector('textarea'); var text=ta.value; if(!normText(text)){ toast('답글 내용을 입력해 주세요.'); return; } ta.value=''; box.hidden=true; if(replyNote(id,text)) highlightCard(id); }
       else if(a==='resolve'){ n=findNote(id); if(n) resolveNote(id,!n.resolved); }
       else if(a==='remove'){ ok=true; try{ ok=window.confirm('이 메모와 답글을 삭제할까요?'); }catch(err){} if(ok) removeNote(id); }
     });
@@ -1344,7 +1375,7 @@ body.doc-notes-open #doc-inspector{ display:none; }
   content.addEventListener('click',function(e){ var m=e.target.closest?e.target.closest('mark.doc-ed-note'):null; if(m && content.contains(m)){ setNotes(true); highlightCard(m.getAttribute('data-doc-note')); } });
 ```
 
-(b) `bind('doc-inspectorToggle','click',function(){ setMore(false);setInspector(...); });`에서 `setMore(false);` 뒤에 `setNotes(false);`를 추가한다.
+(b) `bind('doc-inspectorToggle','click',function(){ setMore(false);setInspector(...); });`에서 `setMore(false);` 뒤에 `setNotes(false);`를 추가한다. `document.addEventListener('selectionchange', ...)` 핸들러의 `savedRange=r.cloneRange();` 뒤에 `if(!r.collapsed) targetCleared=false;`를 추가한다(새 선택은 ×로 지운 상태를 해제한다). `serialize()`의 `#doc-notesBtn` 정리 줄을 `var nbt=clone.querySelector('#doc-notesBtn'); if(nbt){ nbt.setAttribute('aria-expanded','false'); nbt.classList.remove('on'); }`로 바꾸고, `serializeReadOnly()`의 `b.classList.remove('doc-editing','doc-inspector-open');`를 `b.classList.remove('doc-editing','doc-inspector-open','doc-notes-open','doc-changes');`로 바꾼다.
 
 (c) `document.addEventListener('pointerdown', ...)` 핸들러 안 `if(content.contains(e.target))setInspector(false);` 다음에 `if(content.contains(e.target) && window.matchMedia('(max-width:900px)').matches) setNotes(false);`를 추가한다.
 
@@ -1355,7 +1386,7 @@ body.doc-notes-open #doc-inspector{ display:none; }
 - [ ] **Step 6: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":36`.
+Expected: `"pass":true,"count":38`.
 
 - [ ] **Step 7: 커밋**
 
@@ -1623,7 +1654,7 @@ Expected: `FAIL: compare: session baseline ...` (`window.DocEditor.compare is no
 - [ ] **Step 4: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && node --check assets/doc-editor.js && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":43`.
+Expected: `"pass":true,"count":45`.
 
 - [ ] **Step 5: 커밋**
 
@@ -1817,7 +1848,7 @@ body.doc-changes #doc-content [data-doc-change]{ cursor:pointer; }
 - [ ] **Step 5: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":48`.
+Expected: `"pass":true,"count":50`.
 
 - [ ] **Step 6: 커밋**
 
