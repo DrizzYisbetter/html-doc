@@ -98,7 +98,7 @@ C를 새로 파싱한 트리에 표식을 넣고 `content.innerHTML`로 교체�
 - del 블록: B 요소를 깊은 복제해 `doc-ed-diff-del`을 붙이고 내부 `id` 속성을 제거해 삽입한다. del 조각: `<span class="doc-ed-diff-run doc-ed-diff-del">`에 B 노드 복제.
 - mod: C 요소의 innerHTML을 단어 diff 결과로 바꾸고 `doc-ed-diff-mod`. 조각은 `doc-ed-diff-run doc-ed-diff-mod` 래퍼.
 - fmt: `doc-ed-diff-fmt`. 조각은 래퍼.
-- del 삽입 위치: 연산 열에서 다음에 오는 C 단위(eq/ins/mod/fmt)의 첫 노드 앞. 없으면 직전 C 단위의 마지막 노드 뒤. 그것도 없으면 root 끝.
+- del 삽입 위치: 연산 열에서 다음에 오는 C 단위(eq/ins/mod/fmt)의 첫 노드 앞. 단, 블록 단위이고 그 부모가 이 블록을 담을 수 없는데(아래 부모 호환 규칙) 직전에 그린 노드의 부모는 담을 수 있으면 직전 노드 뒤에 둔다(목록의 마지막 항목이 삭제된 경우 목록 안에 남는다). 다음 C 단위가 없으면 직전 노드 뒤. 그것도 없으면 root 끝.
 - 부모 호환: B 태그가 td/th인데 삽입 부모가 tr이 아니거나, li인데 ul/ol/menu가 아니거나, dt/dd인데 dl이 아니거나, caption/tr이면 `<div class="doc-ed-diff-del doc-ed-diff-del-wrap" data-doc-tag="li">`로 감싸 B innerHTML만 넣는다.
 - 스타일: ins 초록 배경·밑줄, del 빨강 배경·취소선, 블록 ins/del은 왼쪽 두꺼운 테두리와 옅은 배경, mod는 왼쪽 파란 테두리, fmt는 점선 테두리와 작은 "서식" 표식(`::before`). 선택된 변경(`doc-ed-diff-active`)은 진한 외곽선. 색은 `--doc-ed-*` 변수를 쓰지 않고 고정 시맨틱 색(초록·빨강·파랑)을 쓴다. 글자색은 상속.
 
@@ -116,7 +116,7 @@ C를 새로 파싱한 트리에 표식을 넣고 `content.innerHTML`로 교체�
 선택된 변경 `i`의 연산을 원본 모델에 적용한다. 모델은 `pristineHtml`을 새로 파싱한 트리이며, 렌더 트리와 같은 문자열에서 파싱했으므로 `path`가 일치한다.
 
 - ins: path의 노드(들)를 제거.
-- del: 5.4의 삽입 위치 규칙을 모델에 적용해 B 복제(블록은 원래 요소, 조각은 노드들)를 삽입. 부모 호환 래핑은 하지 않는다(원래 요소 그대로).
+- del: 5.4의 삽입 위치 규칙(부모 호환에 따른 직전 단위 뒤 배치 포함)을 모델에 적용해 B 복제(블록은 원래 요소, 조각은 노드들)를 삽입. 부모 호환 래핑은 하지 않는다(원래 요소 그대로).
 - mod/fmt: path의 노드(들)를 B 복제로 교체.
 
 적용 후 `pristineHtml = model.innerHTML`, 같은 기준으로 다시 비교·렌더, 요약 갱신, 같은 인덱스(범위를 넘으면 마지막)를 선택, `scheduleAutosave()`. 토스트: "원래대로 되돌렸습니다. 파일에 반영하려면 저장을 누르세요". 히스토리에는 넣지 않는다(일반 편집과 동일). 되돌린 문단 안의 메모 mark는 사라질 수 있으며 6.5의 위치 없음 처리로 남는다.
