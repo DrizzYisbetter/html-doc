@@ -355,10 +355,25 @@ check('diff: inline runs and table cells', await page.evaluate(()=>{
   const td=cmp.cRoot.querySelector('td.doc-ed-diff-mod[data-doc-change="1"]');
   return cmp.counts.mod===2 && !!run && run.innerHTML.includes('<del class="doc-ed-del">텍스트</del>') && run.innerHTML.includes('<ins class="doc-ed-ins">글</ins>') && !!td && td.innerHTML.includes('<del class="doc-ed-del">나</del>') && td.innerHTML.includes('<ins class="doc-ed-ins">다</ins>');
 }));
-check('diff: deleted list item outside a list is wrapped', await page.evaluate(()=>{
-  const D=window.DocEditorDiff, cmp=D.compare('<ul><li>남는 항목</li><li>지운 항목</li></ul><p>끝</p>','<ul><li>남는 항목</li></ul><p>끝</p>');
-  D.render(cmp); const del=cmp.cRoot.querySelector('.doc-ed-diff-del');
-  return cmp.counts.del===1 && del.tagName==='LI' && del.parentNode.tagName==='UL';
+check('diff: deleted last list item stays inside its list (render and revert)', await page.evaluate(()=>{
+  const D=window.DocEditorDiff, base='<ul><li>남는 항목</li><li>지운 항목</li></ul><p>끝</p>', cur='<ul><li>남는 항목</li></ul><p>끝</p>';
+  const cmp=D.compare(base,cur); D.render(cmp); const del=cmp.cRoot.querySelector('.doc-ed-diff-del');
+  const model=document.createElement('div'); model.innerHTML=cur; const ok=D.revert(cmp,0,model);
+  return cmp.counts.del===1 && !!del && del.tagName==='LI' && del.parentNode.tagName==='UL' && ok && model.innerHTML===base;
+}));
+check('diff: deleted cell stays in its row, deleted paragraph stays in its section', await page.evaluate(()=>{
+  const D=window.DocEditorDiff;
+  const t=D.compare('<table><tbody><tr><td>가</td><td>나</td></tr><tr><td>다</td></tr></tbody></table>','<table><tbody><tr><td>가</td></tr><tr><td>다</td></tr></tbody></table>'); D.render(t);
+  const cell=t.cRoot.querySelector('td.doc-ed-diff-del'), rowOk=!!cell && cell.parentNode===t.cRoot.querySelector('tr');
+  const s=D.compare('<section><p>A</p><p>B</p></section><p>C</p>','<section><p>A</p></section><p>C</p>'); D.render(s);
+  const para=s.cRoot.querySelector('p.doc-ed-diff-del'), secOk=!!para && para.parentNode.tagName==='SECTION';
+  const m=document.createElement('div'); m.innerHTML='<section><p>A</p></section><p>C</p>'; const revOk=D.revert(s,0,m) && m.innerHTML==='<section><p>A</p><p>B</p></section><p>C</p>';
+  return rowOk && secOk && revOk;
+}));
+check('diff: empty sides and unchanged hr', await page.evaluate(()=>{
+  const D=window.DocEditorDiff, a=D.compare('','<p>x</p>'), b=D.compare('<p>x</p>',''), c=D.compare('<p>a</p><hr><p>b</p>','<p>a</p><hr><p>b</p>');
+  D.render(b);
+  return a.counts.ins===1 && b.counts.del===1 && b.cRoot.innerHTML==='<p class="doc-ed-diff-del" data-doc-change="0">x</p>' && c.changes.length===0 && c.ops.every(o=>o.type==='eq');
 }));
 check('diff: exceeded budget falls back to whole replacement', await page.evaluate(()=>{
   const D=window.DocEditorDiff;
@@ -480,21 +495,22 @@ Expected: `FAIL: diff: compare counts` (`D.compare is not a function`).
     stripIds(el);return el;
   }
   // cRoot에 표식을 넣는다. 삭제 단위는 다음 C 단위 앞, 없으면 직전에 그린 노드 뒤, 없으면 root 끝에 복제해 넣는다.
+  function samePath(u1,u2){var i;if(u1.path.length!==u2.path.length)return false;for(i=0;i<u1.path.length;i++)if(u1.path[i]!==u2.path[i])return false;return true;}
+  function prevAligned(ops,from){for(var k=from-1;k>=0;k--)if(ops[k].b&&ops[k].c)return ops[k];return null;}
+  function nextAligned(ops,from){for(var k=from+1;k<ops.length;k++)if(ops[k].b&&ops[k].c)return ops[k];return null;}
   function render(cmp){
-    var ops=cmp.ops,changes=[],cursor=null,i,o,el,next,parent,html,delEl,useNext;
+    var ops=cmp.ops,changes=[],cursor=null,i,o,el,next,parent,html,delEl,nextA,prevA,ref;
     function nextC(from){for(var k=from+1;k<ops.length;k++)if(ops[k].c)return ops[k].c;return null;}
     function tagOf(p){return p&&p.nodeType===1&&p!==cmp.cRoot?p.tagName.toLowerCase():'';}
     for(i=0;i<ops.length;i++){
       o=ops[i];
       if(o.type==='eq'){cursor=lastNode(o.c);continue;}
       if(o.type==='del'){
-        // 다음 C 단위 앞이 기본이지만, 그 부모가 이 블록을 담을 수 없고 직전 노드의 부모는 담을 수 있으면(목록의 마지막 항목 삭제 등) 직전 노드 뒤에 둔다.
-        next=nextC(i);
-        useNext=!!next;
-        if(next&&cursor&&o.b.type==='block'&&!compatible(o.b.tag,tagOf(firstNode(next).parentNode))&&compatible(o.b.tag,tagOf(cursor.parentNode)))useNext=false;
-        parent=useNext?firstNode(next).parentNode:(cursor?cursor.parentNode:cmp.cRoot);
-        el=cloneDeleted(o.b,tagOf(parent));
-        if(useNext)parent.insertBefore(el,firstNode(next));else if(cursor)cursor.parentNode.insertBefore(el,cursor.nextSibling);else cmp.cRoot.appendChild(el);
+        // 삭제 단위의 원래 컨테이너를 B 트리의 부모 경로로 찾는다. 다음 정렬 단위(eq/mod/fmt)와 부모가 같으면 그 앞, 직전 정렬 단위와 같으면 그 뒤(그 사이에 같은 부모로 그린 노드가 있으면 그 뒤). 둘 다 아니면 다음 C 단위 앞, 없으면 마지막으로 그린 노드 뒤, 없으면 root 끝.
+        nextA=nextAligned(ops,i);prevA=prevAligned(ops,i);
+        if(nextA&&samePath(o.b,nextA.b)){ref=firstNode(nextA.c);el=cloneDeleted(o.b,tagOf(ref.parentNode));ref.parentNode.insertBefore(el,ref);}
+        else if(prevA&&samePath(o.b,prevA.b)){ref=prevA.el||lastNode(prevA.c);if(cursor&&cursor.parentNode===ref.parentNode)ref=cursor;el=cloneDeleted(o.b,tagOf(ref.parentNode));ref.parentNode.insertBefore(el,ref.nextSibling);}
+        else{next=nextC(i);parent=next?firstNode(next).parentNode:(cursor?cursor.parentNode:cmp.cRoot);el=cloneDeleted(o.b,tagOf(parent));if(next)parent.insertBefore(el,firstNode(next));else if(cursor)cursor.parentNode.insertBefore(el,cursor.nextSibling);else cmp.cRoot.appendChild(el);}
       }else if(o.type==='ins'){el=markUnit(o.c,'doc-ed-diff-ins');}
       else if(o.type==='mod'){
         html=wordDiff(innerOf(o.b),innerOf(o.c));
@@ -521,23 +537,25 @@ Expected: `FAIL: diff: compare counts` (`D.compare is not a function`).
   function cloneNodes(u){return u.nodes.map(function(n){return n.cloneNode(true);});}
   // 원본 모델(같은 문자열을 파싱한 div)에 변경 하나를 기준 쪽으로 되돌린다. 삭제 단위의 위치 규칙은 render와 같다.
   function revert(cmp,index,model){
-    var o=cmp.changes[index],r,i,k,ref,clones,at,nextR=null,prevR=null,useNext;
-    function tagOfParent(range){var p=range.parent;return p&&p!==model?p.tagName.toLowerCase():'';}
+    var o=cmp.changes[index],ops=cmp.ops,r,ra,k,ref,clones,at,nextA,prevA,prevC=null;
+    function insertAll(parent,before){for(var j=0;j<clones.length;j++)parent.insertBefore(clones[j],before);}
     if(!o)return false;
     if(o.type==='ins'){r=unitRange(model,o.c);if(!r)return false;r.nodes.forEach(function(n){r.parent.removeChild(n);});return true;}
     if(o.type==='mod'||o.type==='fmt'){
       r=unitRange(model,o.c);if(!r)return false;clones=cloneNodes(o.b);
-      for(i=0;i<clones.length;i++)r.parent.insertBefore(clones[i],r.nodes[0]);
-      r.nodes.forEach(function(n){r.parent.removeChild(n);});return true;
+      insertAll(r.parent,r.nodes[0]);r.nodes.forEach(function(n){r.parent.removeChild(n);});return true;
     }
-    clones=cloneNodes(o.b);at=cmp.ops.indexOf(o);
-    for(k=at+1;k<cmp.ops.length;k++)if(cmp.ops[k].c){nextR=unitRange(model,cmp.ops[k].c);if(!nextR)return false;break;}
-    for(k=at-1;k>=0;k--)if(cmp.ops[k].c){prevR=unitRange(model,cmp.ops[k].c);if(!prevR)return false;break;}
-    useNext=!!nextR;
-    if(nextR&&prevR&&o.b.type==='block'&&!compatible(o.b.tag,tagOfParent(nextR))&&compatible(o.b.tag,tagOfParent(prevR)))useNext=false;
-    if(useNext){for(i=0;i<clones.length;i++)nextR.parent.insertBefore(clones[i],nextR.nodes[0]);return true;}
-    if(prevR){ref=prevR.nodes[prevR.nodes.length-1].nextSibling;for(i=0;i<clones.length;i++)prevR.parent.insertBefore(clones[i],ref);return true;}
-    for(i=0;i<clones.length;i++)model.appendChild(clones[i]);return true;
+    clones=cloneNodes(o.b);at=ops.indexOf(o);nextA=nextAligned(ops,at);prevA=prevAligned(ops,at);
+    if(nextA&&samePath(o.b,nextA.b)){r=unitRange(model,nextA.c);if(!r)return false;insertAll(r.parent,r.nodes[0]);return true;}
+    if(prevA&&samePath(o.b,prevA.b)){
+      ra=unitRange(model,prevA.c);if(!ra)return false;ref=ra.nodes[ra.nodes.length-1];
+      for(k=at-1;k>=0&&ops[k]!==prevA;k--)if(ops[k].c){prevC=ops[k];break;}
+      if(prevC){r=unitRange(model,prevC.c);if(r&&r.parent===ra.parent)ref=r.nodes[r.nodes.length-1];}
+      insertAll(ra.parent,ref.nextSibling);return true;
+    }
+    for(k=at+1;k<ops.length;k++)if(ops[k].c){r=unitRange(model,ops[k].c);if(!r)return false;insertAll(r.parent,r.nodes[0]);return true;}
+    for(k=at-1;k>=0;k--)if(ops[k].c){r=unitRange(model,ops[k].c);if(!r)return false;insertAll(r.parent,r.nodes[r.nodes.length-1].nextSibling);return true;}
+    insertAll(model,null);return true;
   }
 ```
 
@@ -550,7 +568,7 @@ API 줄:
 - [ ] **Step 4: 재빌드 후 테스트 통과 확인**
 
 Run: `python3 assets/build-template.py && node --test tests/unit/*.test.js && aside repl "$(cat tests/review-notes.js)"`
-Expected: Node 13 pass. Aside 출력 마지막 줄 `{"pass":true,"count":8,...}`.
+Expected: Node 13 pass. Aside 출력 마지막 줄 `{"pass":true,"count":10,...}`.
 
 - [ ] **Step 5: 커밋**
 
@@ -820,7 +838,7 @@ Expected: `FAIL: author: prompt once on first save and remembered`.
 - [ ] **Step 5: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && node --check assets/doc-editor.js && aside repl "$(cat tests/review-notes.js)" && aside repl "$(cat tests/browser-regression.js)" && aside repl "$(cat tests/persistent-save.js)"`
-Expected: review-notes `"pass":true,"count":18`, browser-regression `"pass":true,"count":16`, persistent-save `"pass":true`.
+Expected: review-notes `"pass":true,"count":20`, browser-regression `"pass":true,"count":16`, persistent-save `"pass":true`.
 
 - [ ] **Step 6: 커밋**
 
@@ -1029,7 +1047,7 @@ Expected: `FAIL: notes: anchored note wraps the selection ...` (`window.DocEdito
 - [ ] **Step 5: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && node --check assets/doc-editor.js && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":27`.
+Expected: `"pass":true,"count":29`.
 
 - [ ] **Step 6: 커밋**
 
@@ -1322,7 +1340,7 @@ body.doc-notes-open #doc-inspector{ display:none; }
 - [ ] **Step 6: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":34`.
+Expected: `"pass":true,"count":36`.
 
 - [ ] **Step 7: 커밋**
 
@@ -1590,7 +1608,7 @@ Expected: `FAIL: compare: session baseline ...` (`window.DocEditor.compare is no
 - [ ] **Step 4: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && node --check assets/doc-editor.js && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":41`.
+Expected: `"pass":true,"count":43`.
 
 - [ ] **Step 5: 커밋**
 
@@ -1784,7 +1802,7 @@ body.doc-changes #doc-content [data-doc-change]{ cursor:pointer; }
 - [ ] **Step 5: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":46`.
+Expected: `"pass":true,"count":48`.
 
 - [ ] **Step 6: 커밋**
 
