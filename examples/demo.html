@@ -1140,14 +1140,15 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   function afterNotesChange(){ reconcileNotes(); renderNotes(); scheduleAutosave(); }
 
   /* ---------- 메모 패널 ---------- */
+  var targetCleared=false;
   function setNotes(on){
     body.classList.toggle('doc-notes-open',on);
-    var t=$('doc-notesBtn'); if(t) t.setAttribute('aria-expanded',String(on));
+    var t=$('doc-notesBtn'); if(t){ t.setAttribute('aria-expanded',String(on)); t.classList.toggle('on',on); }
     if(on){ setInspector(false); setMore(false); captureTarget(); renderNotes(); }
   }
-  // 작성 상자에 포커스가 올 때의 본문 선택을 메모 대상으로 잡는다. 선택이 없으면 문서 전체.
-  function captureTarget(){ noteTarget=comparing?null:targetFrom(savedRange); showTarget(); }
-  function clearTarget(){ noteTarget=null; showTarget(); }
+  // 작성 상자에 포커스가 올 때의 본문 선택을 메모 대상으로 잡는다. 선택이 없거나 ×로 지웠으면 문서 전체. 새로 선택하면 다시 잡는다.
+  function captureTarget(){ noteTarget=(comparing||targetCleared)?null:targetFrom(savedRange); showTarget(); }
+  function clearTarget(){ noteTarget=null; targetCleared=true; showTarget(); }
   function showTarget(){
     var t=$('doc-notesTarget'), hint=$('doc-notesHint'), input=$('doc-notesInput'), add=$('doc-notesAdd'), q, x;
     if(t){ q=t.querySelector('.q'); x=$('doc-notesTargetClear'); t.classList.toggle('has',!!noteTarget); if(q) q.textContent=noteTarget?('“'+noteTarget.quote+'”'):'문서 전체'; if(x) x.hidden=!noteTarget; }
@@ -1182,20 +1183,30 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     return card;
   }
   function renderNotes(){
-    var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'), list=$('doc-notesList'), chk=$('doc-notesShowResolved'), showResolved=!!(chk&&chk.checked), shown=[], i;
+    var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'), list=$('doc-notesList'), chk=$('doc-notesShowResolved'), showResolved=!!(chk&&chk.checked), shown=[], i, keep={}, draft=null, card, box, ta, state;
     if(count) count.textContent=open?String(open):''; if(btn) btn.title=open?('미해결 메모 '+open+'개'):'메모 보기·남기기';
     showTarget();
-    if(!list) return; list.innerHTML='';
+    if(!list) return;
+    // 다시 그리기 전에 쓰다 만 답글과 카드의 펼침·선택 상태를 보존한다.
+    box=list.querySelector('.doc-ed-note-replybox:not([hidden])');
+    if(box){ card=box.closest('.doc-ed-note-card'); ta=box.querySelector('textarea'); draft={id:card?card.getAttribute('data-note-id'):'',text:ta?ta.value:''}; }
+    list.querySelectorAll('.doc-ed-note-card.open,.doc-ed-note-card.active').forEach(function(c){ keep[c.getAttribute('data-note-id')]=(c.classList.contains('open')?'o':'')+(c.classList.contains('active')?'a':''); });
+    list.innerHTML='';
     for(i=0;i<notes.length;i++) if(showResolved||!notes[i].resolved) shown.push(notes[i]);
     if(!shown.length){ list.innerHTML='<p class="doc-ed-muted" style="font-size:13px;margin:6px 4px">'+(notes.length?'해결되지 않은 메모가 없습니다.':'메모가 없습니다. 본문을 선택하고 위에 남겨 보세요.')+'</p>'; return; }
-    for(i=0;i<shown.length;i++) list.appendChild(noteCard(shown[i]));
+    for(i=0;i<shown.length;i++){
+      card=noteCard(shown[i]); state=keep[shown[i].id]||'';
+      if(state.indexOf('o')>=0) card.classList.add('open'); if(state.indexOf('a')>=0) card.classList.add('active');
+      if(draft&&draft.id===shown[i].id){ box=card.querySelector('.doc-ed-note-replybox'); box.hidden=false; box.querySelector('textarea').value=draft.text; }
+      list.appendChild(card);
+    }
   }
   bind('doc-notesBtn','click',function(){ setNotes(!body.classList.contains('doc-notes-open')); });
   bind('doc-notesClose','click',function(){ setNotes(false); var t=$('doc-notesBtn'); if(t) t.focus(); });
   bind('doc-ebNote','click',function(){ setNotes(true); var input=$('doc-notesInput'); if(input && !input.disabled) input.focus(); });
   bind('doc-notesInput','focus',captureTarget);
   bind('doc-notesTargetClear','click',clearTarget);
-  bind('doc-notesAdd','click',function(){ var input=$('doc-notesInput'); if(!input) return; var n=addNote(input.value,noteTarget); if(n){ input.value=''; noteTarget=null; showTarget(); highlightCard(n.id); } });
+  bind('doc-notesAdd','click',function(){ var input=$('doc-notesInput'); if(!input) return; if(!normText(input.value)){ toast('메모 내용을 입력해 주세요.'); return; } var n=addNote(input.value,noteTarget); if(n){ input.value=''; noteTarget=null; targetCleared=false; showTarget(); highlightCard(n.id); } });
   bind('doc-notesShowResolved','change',renderNotes);
   bind('doc-notesAuthor','change',function(){ storeAuthor(this.value.trim()); });
   (function(){
@@ -1207,7 +1218,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
       if(!act){ if(e.target.closest('textarea')) return; card.classList.toggle('open'); locateNote(id); return; }
       a=act.getAttribute('data-act');
       if(a==='reply'){ box=card.querySelector('.doc-ed-note-replybox'); box.hidden=!box.hidden; if(!box.hidden) box.querySelector('textarea').focus(); }
-      else if(a==='send'){ ta=card.querySelector('.doc-ed-note-replybox textarea'); if(replyNote(id,ta.value)) highlightCard(id); }
+      else if(a==='send'){ box=card.querySelector('.doc-ed-note-replybox'); ta=box.querySelector('textarea'); var text=ta.value; if(!normText(text)){ toast('답글 내용을 입력해 주세요.'); return; } ta.value=''; box.hidden=true; if(replyNote(id,text)) highlightCard(id); }
       else if(a==='resolve'){ n=findNote(id); if(n) resolveNote(id,!n.resolved); }
       else if(a==='remove'){ ok=true; try{ ok=window.confirm('이 메모와 답글을 삭제할까요?'); }catch(err){} if(ok) removeNote(id); }
     });
@@ -1294,7 +1305,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
 
   document.addEventListener('selectionchange', function(){
     var s=window.getSelection();
-    if(s && s.rangeCount){ var r=s.getRangeAt(0); if(content.contains(r.commonAncestorContainer)){ savedRange=r.cloneRange(); updateInspector(); } }
+    if(s && s.rangeCount){ var r=s.getRangeAt(0); if(content.contains(r.commonAncestorContainer)){ savedRange=r.cloneRange(); if(!r.collapsed) targetCleared=false; updateInspector(); } }
   });
 
   /* ---------- 속성 패널 ---------- */
@@ -1366,7 +1377,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     var ni=clone.querySelector('#doc-notesInput'); if(ni) ni.textContent='';
     var na=clone.querySelector('#doc-notesAuthor'); if(na) na.removeAttribute('value');
     var nh=clone.querySelector('#doc-notesHint'); if(nh) nh.hidden=true;
-    var nbt=clone.querySelector('#doc-notesBtn'); if(nbt) nbt.setAttribute('aria-expanded','false');
+    var nbt=clone.querySelector('#doc-notesBtn'); if(nbt){ nbt.setAttribute('aria-expanded','false'); nbt.classList.remove('on'); }
     var cbt=clone.querySelector('#doc-changesBtn'); if(cbt) cbt.classList.remove('on');
     var rv=clone.querySelector('#doc-changesRevert'); if(rv) rv.disabled=true;
     return '<!DOCTYPE html>\n'+clone.outerHTML;
@@ -1394,7 +1405,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
      '[data-doc-editor-download]'].forEach(function(selector){clone.querySelectorAll(selector).forEach(function(el){el.remove();});});
     var b=clone.querySelector('body');
     if(b){
-      b.classList.remove('doc-editing','doc-inspector-open');b.removeAttribute('data-doc-id');b.removeAttribute('data-doc-saved-by');b.removeAttribute('data-doc-saved-at');b.style.paddingTop=originalPaddingTop;
+      b.classList.remove('doc-editing','doc-inspector-open','doc-notes-open','doc-changes');b.removeAttribute('data-doc-id');b.removeAttribute('data-doc-saved-by');b.removeAttribute('data-doc-saved-at');b.style.paddingTop=originalPaddingTop;
       ['--doc-ed-controls-height','--doc-ed-controls-width','--doc-ed-tools-bottom','--doc-ed-visible-height'].forEach(function(name){b.style.removeProperty(name);});
     }
     var c=clone.querySelector('#doc-content');

@@ -231,7 +231,27 @@ check('notes ui: a note that lost its mark shows a badge', await page.evaluate((
   return /위치 없음/.test(document.querySelector('#doc-notesList .doc-ed-note-card').textContent);
 }));
 check('notes ui: name field shows and stores the author', await page.evaluate(()=>{ const i=document.getElementById('doc-notesAuthor'), shown=i.value==='검토자'; i.value='새 이름'; i.dispatchEvent(new Event('change')); return shown && localStorage.getItem('docedit:author')==='새 이름'; }));
-check('notes ui: saved html has no open panel state or typed text', await page.evaluate(()=>{ document.getElementById('doc-notesInput').value='임시'; const d=new DOMParser().parseFromString(window.DocEditor.getHTML(),'text/html'); return !d.body.classList.contains('doc-notes-open') && d.getElementById('doc-notesList').innerHTML==='' && d.getElementById('doc-notesInput').textContent==='' && !d.getElementById('doc-notesAuthor').hasAttribute('value') && d.getElementById('doc-notesBtn').getAttribute('aria-expanded')==='false'; }));
+check('notes ui: saved html has no open panel state or typed text', await page.evaluate(()=>{ document.getElementById('doc-notesInput').value='임시'; const d=new DOMParser().parseFromString(window.DocEditor.getHTML(),'text/html'), ro=new DOMParser().parseFromString(window.DocEditor.getReadOnlyHTML(),'text/html'); return !d.body.classList.contains('doc-notes-open') && d.getElementById('doc-notesList').innerHTML==='' && d.getElementById('doc-notesInput').textContent==='' && !d.getElementById('doc-notesAuthor').hasAttribute('value') && d.getElementById('doc-notesBtn').getAttribute('aria-expanded')==='false' && !d.getElementById('doc-notesBtn').classList.contains('on') && !ro.body.classList.contains('doc-notes-open'); }));
+check('notes ui: toolbar button opens the panel and Escape closes it', await page.evaluate(()=>{
+  window.DocEditor.edit(true); document.getElementById('doc-ebNote').click();
+  const opened=document.body.classList.contains('doc-notes-open') && document.activeElement===document.getElementById('doc-notesInput') && document.getElementById('doc-notesBtn').classList.contains('on');
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  const closed=!document.body.classList.contains('doc-notes-open') && !document.getElementById('doc-notesBtn').classList.contains('on');
+  window.DocEditor.edit(false); return opened && closed;
+}));
+check('notes ui: a half-typed reply survives another card changing', await page.evaluate(()=>{
+  const a=window.DocEditor.notes.add('첫 메모'), b=window.DocEditor.notes.add('둘째 메모');
+  document.getElementById('doc-notesBtn').click();
+  const list=document.getElementById('doc-notesList'), cardA=list.querySelector('[data-note-id="'+a+'"]'), cardB=list.querySelector('[data-note-id="'+b+'"]');
+  cardA.querySelector('[data-act="reply"]').click(); cardA.querySelector('.doc-ed-note-replybox textarea').value='쓰다 만 답글';
+  cardB.querySelector('[data-act="resolve"]').click();
+  const after=list.querySelector('[data-note-id="'+a+'"] .doc-ed-note-replybox');
+  const kept=!!after && !after.hidden && after.querySelector('textarea').value==='쓰다 만 답글';
+  after.querySelector('[data-act="send"]').click();
+  const sent=window.DocEditor.notes.list().find(n=>n.id===a).replies.length===1 && list.querySelector('[data-note-id="'+a+'"] .doc-ed-note-replybox').hidden;
+  window.DocEditor.notes.remove(a); window.DocEditor.notes.remove(b);
+  return kept && sent;
+}));
 await page.evaluate(()=>{ document.getElementById('doc-notesInput').value=''; document.getElementById('doc-notesClose').click(); window.DocEditor.notes.list().forEach(n=>window.DocEditor.notes.remove(n.id)); localStorage.removeItem('docedit:autosave:url:'+location.origin+location.pathname); });
 
 console.log(JSON.stringify({pass:true,count:results.length,results}));
