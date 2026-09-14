@@ -834,23 +834,26 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   }
   // cRoot에 표식을 넣는다. 삭제 단위는 다음 C 단위 앞, 없으면 직전에 그린 노드 뒤, 없으면 root 끝에 복제해 넣는다.
   function render(cmp){
-    var ops=cmp.ops,changes=[],cursor=null,i,o,el,next,parent,html,delEl,parentTag;
+    var ops=cmp.ops,changes=[],cursor=null,i,o,el,next,parent,html,delEl,useNext;
     function nextC(from){for(var k=from+1;k<ops.length;k++)if(ops[k].c)return ops[k].c;return null;}
+    function tagOf(p){return p&&p.nodeType===1&&p!==cmp.cRoot?p.tagName.toLowerCase():'';}
     for(i=0;i<ops.length;i++){
       o=ops[i];
       if(o.type==='eq'){cursor=lastNode(o.c);continue;}
       if(o.type==='del'){
+        // 다음 C 단위 앞이 기본이지만, 그 부모가 이 블록을 담을 수 없고 직전 노드의 부모는 담을 수 있으면(목록의 마지막 항목 삭제 등) 직전 노드 뒤에 둔다.
         next=nextC(i);
-        parent=next?firstNode(next).parentNode:(cursor?cursor.parentNode:cmp.cRoot);
-        parentTag=parent&&parent.nodeType===1&&parent!==cmp.cRoot?parent.tagName.toLowerCase():'';
-        el=cloneDeleted(o.b,parentTag);
-        if(next)parent.insertBefore(el,firstNode(next));else if(cursor)cursor.parentNode.insertBefore(el,cursor.nextSibling);else cmp.cRoot.appendChild(el);
+        useNext=!!next;
+        if(next&&cursor&&o.b.type==='block'&&!compatible(o.b.tag,tagOf(firstNode(next).parentNode))&&compatible(o.b.tag,tagOf(cursor.parentNode)))useNext=false;
+        parent=useNext?firstNode(next).parentNode:(cursor?cursor.parentNode:cmp.cRoot);
+        el=cloneDeleted(o.b,tagOf(parent));
+        if(useNext)parent.insertBefore(el,firstNode(next));else if(cursor)cursor.parentNode.insertBefore(el,cursor.nextSibling);else cmp.cRoot.appendChild(el);
       }else if(o.type==='ins'){el=markUnit(o.c,'doc-ed-diff-ins');}
       else if(o.type==='mod'){
         html=wordDiff(innerOf(o.b),innerOf(o.c));
         if(html===null){
           parent=firstNode(o.c).parentNode;
-          delEl=cloneDeleted(o.b,parent!==cmp.cRoot?parent.tagName.toLowerCase():'');
+          delEl=cloneDeleted(o.b,tagOf(parent));
           parent.insertBefore(delEl,firstNode(o.c));delEl.setAttribute('data-doc-change',String(changes.length));
           el=markUnit(o.c,'doc-ed-diff-ins');
         }else if(o.c.type==='block'){el=o.c.nodes[0];el.innerHTML=html;el.classList.add('doc-ed-diff-mod');}
@@ -869,9 +872,10 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   function nodeAt(root,path){var n=root;for(var i=0;i<path.length;i++){n=n.childNodes[path[i]];if(!n)return null;}return n;}
   function unitRange(root,u){var parent=nodeAt(root,u.path),nodes=[],i,n;if(!parent)return null;for(i=u.start;i<=u.end;i++){n=parent.childNodes[i];if(!n)return null;nodes.push(n);}return {parent:parent,nodes:nodes};}
   function cloneNodes(u){return u.nodes.map(function(n){return n.cloneNode(true);});}
-  // 원본 모델(같은 문자열을 파싱한 div)에 변경 하나를 기준 쪽으로 되돌린다.
+  // 원본 모델(같은 문자열을 파싱한 div)에 변경 하나를 기준 쪽으로 되돌린다. 삭제 단위의 위치 규칙은 render와 같다.
   function revert(cmp,index,model){
-    var o=cmp.changes[index],r,i,k,ref,clones,at;
+    var o=cmp.changes[index],r,i,k,ref,clones,at,nextR=null,prevR=null,useNext;
+    function tagOfParent(range){var p=range.parent;return p&&p!==model?p.tagName.toLowerCase():'';}
     if(!o)return false;
     if(o.type==='ins'){r=unitRange(model,o.c);if(!r)return false;r.nodes.forEach(function(n){r.parent.removeChild(n);});return true;}
     if(o.type==='mod'||o.type==='fmt'){
@@ -880,8 +884,12 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
       r.nodes.forEach(function(n){r.parent.removeChild(n);});return true;
     }
     clones=cloneNodes(o.b);at=cmp.ops.indexOf(o);
-    for(k=at+1;k<cmp.ops.length;k++)if(cmp.ops[k].c){r=unitRange(model,cmp.ops[k].c);if(!r)return false;for(i=0;i<clones.length;i++)r.parent.insertBefore(clones[i],r.nodes[0]);return true;}
-    for(k=at-1;k>=0;k--)if(cmp.ops[k].c){r=unitRange(model,cmp.ops[k].c);if(!r)return false;ref=r.nodes[r.nodes.length-1].nextSibling;for(i=0;i<clones.length;i++)r.parent.insertBefore(clones[i],ref);return true;}
+    for(k=at+1;k<cmp.ops.length;k++)if(cmp.ops[k].c){nextR=unitRange(model,cmp.ops[k].c);if(!nextR)return false;break;}
+    for(k=at-1;k>=0;k--)if(cmp.ops[k].c){prevR=unitRange(model,cmp.ops[k].c);if(!prevR)return false;break;}
+    useNext=!!nextR;
+    if(nextR&&prevR&&o.b.type==='block'&&!compatible(o.b.tag,tagOfParent(nextR))&&compatible(o.b.tag,tagOfParent(prevR)))useNext=false;
+    if(useNext){for(i=0;i<clones.length;i++)nextR.parent.insertBefore(clones[i],nextR.nodes[0]);return true;}
+    if(prevR){ref=prevR.nodes[prevR.nodes.length-1].nextSibling;for(i=0;i<clones.length;i++)prevR.parent.insertBefore(clones[i],ref);return true;}
     for(i=0;i<clones.length;i++)model.appendChild(clones[i]);return true;
   }
 
