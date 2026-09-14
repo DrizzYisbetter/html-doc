@@ -1,7 +1,7 @@
 /* 기존 HTML을 실행하지 않고 편집 가능한 사본으로 변환한다. */
 (function(){
   'use strict';
-  var chromeIds=['doc-controls','doc-editbar','doc-inspector','doc-editflag','doc-restore-banner','doc-history-modal','doc-toast'];
+  var chromeIds=['doc-controls','doc-editbar','doc-changes-bar','doc-inspector','doc-notes-panel','doc-editflag','doc-restore-banner','doc-history-modal','doc-toast'];
 
   function bundleFrom(doc){
     var style=doc.getElementById('doc-editor-style'), script=doc.getElementById('doc-editor-script');
@@ -19,6 +19,12 @@
       var attach=el.querySelector('#doc-attachBtn');if(attach)attach.disabled=false;
       var msg=el.querySelector('.msg');if(id==='doc-restore-banner' && msg)msg.textContent='자동저장본이 있습니다. 복구하시겠어요?';
       if(id==='doc-toast')el.textContent='';
+      el.querySelectorAll('#doc-notesList,#doc-changesBase,#doc-changesSummary').forEach(function(b){b.innerHTML='';});
+      var notesInput=el.querySelector('#doc-notesInput');if(notesInput)notesInput.textContent='';
+      var notesAuthor=el.querySelector('#doc-notesAuthor');if(notesAuthor)notesAuthor.removeAttribute('value');
+      var notesTarget=el.querySelector('#doc-notesTarget');if(notesTarget){notesTarget.classList.remove('has');var q=notesTarget.querySelector('.q');if(q)q.textContent='문서 전체';var x=notesTarget.querySelector('#doc-notesTargetClear');if(x)x.hidden=true;}
+      var notesHint=el.querySelector('#doc-notesHint');if(notesHint)notesHint.hidden=true;
+      var revert=el.querySelector('#doc-changesRevert');if(revert)revert.disabled=true;
       return el.outerHTML;
     }).join('\n');
     return {css:style.textContent,js:script.textContent,chrome:chrome};
@@ -30,7 +36,7 @@
     // 분리된 문서로만 파싱한다. 선택한 HTML을 현재 페이지나 미리보기 iframe에 넣지 않는다.
     var doc=new DOMParser().parseFromString(source,'text/html');
     if(doc.querySelector('frameset'))throw new Error('frameset 문서는 지원하지 않습니다. 본문 HTML 파일을 선택해 주세요.');
-    var installed=doc.querySelector('#doc-editor-script,#doc-editor-style,#doc-history,#doc-controls');
+    var installed=doc.querySelector('#doc-editor-script,#doc-editor-style,#doc-history,#doc-notes,#doc-controls,#doc-notes-panel,#doc-changes-bar');
     if(installed || Array.prototype.some.call(doc.scripts,function(s){return /window\.DocEditor\s*=/.test(s.textContent);})){
       throw new Error('이미 편집기가 있거나 편집기와 같은 ID를 쓰는 파일입니다. 중복으로 추가하지 않았습니다.');
     }
@@ -54,6 +60,7 @@
     }
     root.setAttribute('contenteditable','false');
     doc.body.removeAttribute('data-doc-id');
+    doc.body.removeAttribute('data-doc-saved-by');doc.body.removeAttribute('data-doc-saved-at');
     // 입력 인코딩과 관계없이 다운로드는 UTF-8이다. 원래의 charset 선언만 갱신한다.
     doc.querySelectorAll('meta[charset]').forEach(function(m){m.setAttribute('charset','utf-8');});
     doc.querySelectorAll('meta[http-equiv]').forEach(function(m){if(m.httpEquiv.toLowerCase()==='content-type')m.setAttribute('content','text/html; charset=utf-8');});
@@ -62,6 +69,7 @@
     var style=doc.createElement('style');style.id='doc-editor-style';style.textContent=bundle.css;doc.head.appendChild(style);
     doc.body.appendChild(chrome.content);
     var history=doc.createElement('script');history.type='application/json';history.id='doc-history';history.textContent='[]';doc.body.appendChild(history);
+    var notesStore=doc.createElement('script');notesStore.type='application/json';notesStore.id='doc-notes';notesStore.textContent='[]';doc.body.appendChild(notesStore);
     var script=doc.createElement('script');script.id='doc-editor-script';script.textContent=bundle.js;doc.body.appendChild(script);
     var doctype=doc.doctype?new XMLSerializer().serializeToString(doc.doctype):'<!DOCTYPE html>';
     return doctype+'\n'+doc.documentElement.outerHTML;

@@ -40,7 +40,7 @@ const result=await page.evaluate(async()=>{
    check('desktop: inspector visible below toolbar',shown('doc-inspector') && rect('doc-inspector').top>=bar.bottom);
   }
   const clean=new DOMParser().parseFromString(ed.getHTML(),'text/html');
-  check(`${width}x${height}: serialized UI closes`,!clean.body.classList.contains('doc-inspector-open') && !clean.body.classList.contains('doc-editing') && clean.querySelector('#doc-moreToggle').getAttribute('aria-expanded')==='false' && !clean.body.style.getPropertyValue('--doc-ed-tools-bottom'));
+  check(`${width}x${height}: serialized UI closes`,!clean.body.classList.contains('doc-inspector-open') && !clean.body.classList.contains('doc-editing') && clean.querySelector('#doc-moreToggle').getAttribute('aria-expanded')==='false' && !clean.body.style.getPropertyValue('--doc-ed-tools-bottom') && !clean.body.classList.contains('doc-notes-open') && !clean.body.classList.contains('doc-changes'));
   ed.edit(false);await settle();
   check(`${width}x${height}: body unchanged after toggles`,d.getElementById('doc-content').innerHTML===original && d.body.style.paddingTop==='' && !shown('doc-editbar'));
   if(width===390 && height===844){

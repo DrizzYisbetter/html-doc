@@ -12,7 +12,9 @@ const result=await page.evaluate(async()=>{
   check('original body markup preserved inside transparent root',after.getElementById('doc-content').innerHTML===before.body.innerHTML && after.body.dataset.custom==='keep');
   check('original design and metadata preserved',after.querySelector('style').textContent===before.querySelector('style').textContent && after.title===before.title && after.documentElement.lang==='ko');
   check('conversion never runs selected script',!window.fixtureRan);
-  check('one editor and empty history',after.querySelectorAll('#doc-content').length===1 && after.querySelectorAll('#doc-editor-script').length===1 && after.getElementById('doc-history').textContent==='[]');
+  check('one editor, empty history and empty notes store',after.querySelectorAll('#doc-content').length===1 && after.querySelectorAll('#doc-editor-script').length===1 && after.getElementById('doc-history').textContent==='[]' && after.getElementById('doc-notes').textContent==='[]');
+  check('all nine UI blocks are attached',['doc-controls','doc-editbar','doc-inspector','doc-notes-panel','doc-changes-bar','doc-editflag','doc-restore-banner','doc-history-modal','doc-toast'].every(id=>after.getElementById(id)));
+  check('provenance attributes are not inherited',!parse(api.convert('<body data-doc-saved-by="누군가" data-doc-saved-at="2026-01-01"><p>본문</p></body>',bundle)).body.hasAttribute('data-doc-saved-by'));
   const old=await frame(source),f=await frame(output),w=f.contentWindow,d=w.document;
   check('output starts in view mode with original script running once',w.DocEditor && !w.DocEditor.isEditing() && w.fixtureRan===1);
   const bounds=doc=>Array.from(doc.querySelectorAll('.card')).map(x=>{const r=x.getBoundingClientRect();return [r.x,r.y,r.width,r.height];});
@@ -28,6 +30,7 @@ const result=await page.evaluate(async()=>{
   check('editor API does not leak current body or history',!other.includes('편집된 본문') && parse(other).getElementById('doc-history').textContent==='[]');
   check('attaching another file does not change current editor state',w.DocEditor.isEditing() && state.body===d.getElementById('doc-content').innerHTML && state.history===d.getElementById('doc-history').textContent && state.padding===d.body.style.paddingTop);
   fails('duplicate editor refused',output);
+  fails('conflicting notes store refused','<script type="application/json" id="doc-notes">[]</script><p>본문</p>');
   fails('conflicting UI ID refused','<p id="doc-saveBtn">기존 내용</p>');
   fails('duplicate root refused','<main id="doc-content">1</main><div id="doc-content">2</div>');
   fails('invalid root refused','<body id="doc-content">본문</body>');

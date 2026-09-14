@@ -19,7 +19,7 @@ const summary=await page.evaluate(async()=>{
   const beforeTable=w.getComputedStyle(c.querySelector('table.doc-ed-table th'));
   const tableStyle={padding:beforeTable.padding,border:beforeTable.borderTop,background:beforeTable.backgroundColor};
   const html=w.DocEditor.getReadOnlyHTML(),out=new DOMParser().parseFromString(html,'text/html');
-  check(name+': editor UI/code/history stripped',!out.querySelector('#doc-controls,#doc-editbar,#doc-inspector,#doc-editflag,#doc-restore-banner,#doc-history-modal,#doc-toast,#doc-history,#doc-editor-style,#doc-editor-script') && !html.includes('HISTORY_ONLY_SECRET'));
+  check(name+': editor UI/code/history stripped',!out.querySelector('#doc-controls,#doc-editbar,#doc-inspector,#doc-editflag,#doc-restore-banner,#doc-history-modal,#doc-toast,#doc-history,#doc-editor-style,#doc-editor-script,#doc-notes-panel,#doc-changes-bar,#doc-notes') && !html.includes('HISTORY_ONLY_SECRET'));
   check(name+': current body and original design retained',out.getElementById('doc-content').innerHTML===before.body && out.querySelector('style').textContent===sourceDesign);
   check(name+': edit state stripped',!out.querySelector('#doc-content[contenteditable]') && !out.body.hasAttribute('data-doc-id') && !out.body.classList.contains('doc-editing') && out.body.style.paddingTop==='11px' && !out.body.style.getPropertyValue('--doc-ed-tools-bottom'));
   check(name+': original stays editable and unchanged',w.DocEditor.isEditing() && c.innerHTML===before.body && d.getElementById('doc-history').textContent===before.history && d.body.style.paddingTop===before.padding && d.body.dataset.docId===before.id && localStorage.getItem('docedit:autosave:'+before.id)===before.backup);
@@ -34,6 +34,12 @@ const summary=await page.evaluate(async()=>{
   const blobs=await Promise.all(captured.map(async a=>({name:a.name,html:await(await w.fetch(a.url)).text()})));
   check(name+': button downloads separate clean copies',blobs.length===2 && blobs.every(b=>b.name.endsWith('-배포용.html') && !b.html.includes('data-doc-editor-download') && !new DOMParser().parseFromString(b.html,'text/html').querySelector('#doc-editor-script')));
   check(name+': regular save still includes editor',new DOMParser().parseFromString(w.DocEditor.getHTML(),'text/html').querySelector('#doc-editor-script'));
+  w.prompt=()=>'QA';
+  const noteHost=[...c.querySelectorAll('p')].find(p=>p.firstChild&&p.firstChild.nodeType===3), noteRange=d.createRange(); noteRange.setStart(noteHost.firstChild,0); noteRange.setEnd(noteHost.firstChild,1);
+  const noteId=w.DocEditor.notes.add('내보내기 검증 메모',{range:noteRange});
+  const roNotes=new DOMParser().parseFromString(w.DocEditor.getReadOnlyHTML(),'text/html');
+  check(name+': export drops notes, marks, review UI and provenance',!!noteId && !roNotes.querySelector('#doc-notes,#doc-notes-panel,#doc-changes-bar,mark.doc-ed-note') && !roNotes.body.hasAttribute('data-doc-saved-by') && roNotes.getElementById('doc-content').textContent===c.textContent && !!c.querySelector('mark.doc-ed-note'));
+  w.DocEditor.notes.remove(noteId);
   exported.remove();f.remove();localStorage.removeItem('docedit:autosave:'+before.id);
  }
  return {pass:results.every(r=>r.pass),count:results.length,failures:results.filter(r=>!r.pass)};

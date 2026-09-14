@@ -48,8 +48,9 @@ def main():
     css = (ROOT / 'assets/doc-editor.css').read_text().strip()
     js = ((ROOT / 'assets/doc-attach.js').read_text() + '\n' + (ROOT / 'assets/doc-diff.js').read_text()
           + '\n' + (ROOT / 'assets/doc-editor.js').read_text()).strip()
-    expected = ['doc-content', 'doc-controls', 'doc-editbar', 'doc-inspector', 'doc-editflag',
-                'doc-restore-banner', 'doc-history-modal', 'doc-toast', 'doc-history', 'doc-attachBtn', 'doc-exportBtn']
+    expected = ['doc-content', 'doc-controls', 'doc-editbar', 'doc-inspector', 'doc-notes-panel', 'doc-changes-bar', 'doc-editflag',
+                'doc-restore-banner', 'doc-history-modal', 'doc-toast', 'doc-history', 'doc-notes', 'doc-attachBtn', 'doc-exportBtn',
+                'doc-notesBtn', 'doc-changesBtn', 'doc-ebNote']
     for name in ['assets/skeleton.html', 'examples/demo.html']:
         doc = Document((ROOT / name).read_text())
         counts = Counter(doc.ids)
@@ -58,6 +59,7 @@ def main():
         assert doc.blocks['doc-editor-style'].strip() == css, f'Style mismatch: {name}'
         assert doc.blocks['doc-editor-script'].strip() == js, f'Engine mismatch: {name}'
         assert doc.blocks['doc-history'].strip() == '[]', f'Example contains history: {name}'
+        assert doc.blocks['doc-notes'].strip() == '[]', f'Example contains notes: {name}'
     tool = Document((ROOT / 'tools/add-editor.html').read_text())
     import json
     bundle = json.loads(tool.blocks['editor-bundle'])
