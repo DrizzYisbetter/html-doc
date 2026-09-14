@@ -2125,6 +2125,15 @@ git commit -m "문서: 1.6.0 메모·변경 사항·이름·백업 안전장치 
 - Consumes: Task 1~9의 결과물.
 - Produces: 두 로컬 복사본이 저장소와 같은 엔진·예시·도구·테스트를 갖는다. 로컬 SKILL.md는 저장소 `references/guide.ko.md` 본문에 한국어 frontmatter(version 1.6.0)와 줄표 금지 규칙·체크리스트 항목을 더한 형태다.
 
+- [ ] **Step 0: 저장소 루트 README.md 동기화 (저장소 커밋)**
+
+`README.md`는 `README.ko.md`의 사본이다(GitHub 기본 표시용). 저장소에서 `cp README.ko.md README.md`를 실행하고 `python3 scripts/check-release.py`가 통과하는지 확인한 뒤 커밋한다:
+
+```bash
+git add README.md
+git commit -m "README.md를 README.ko.md와 동기화 (1.6.0)"
+```
+
 - [ ] **Step 1: 동기화 전 상태 확인**
 
 Run: `diff -rq --exclude=.DS_Store ~/html-doc-release/html-doc/assets ~/.claude/skills/html-doc/assets | head`
