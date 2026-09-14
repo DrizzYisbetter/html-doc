@@ -181,4 +181,57 @@ await page.reload(); await stub();
 check('notes: recovery restores notes with the body', await page.evaluate(()=>{ const b=document.getElementById('doc-restore-banner'); if(!b.classList.contains('show')) return false; document.getElementById('doc-rb-restore').click(); return window.DocEditor.notes.list().length===3 && document.getElementById('doc-content').textContent.includes('고아 표시'); }));
 await page.evaluate(()=>localStorage.removeItem('docedit:autosave:url:'+location.origin+location.pathname));
 
+// ---- C2. 메모 패널 UI ----
+await fresh();
+check('notes ui: button opens the panel and hides the inspector while editing', await page.evaluate(()=>{
+  const shown=id=>getComputedStyle(document.getElementById(id)).display!=='none';
+  window.DocEditor.edit(true); document.getElementById('doc-notesBtn').click();
+  const ok=document.body.classList.contains('doc-notes-open') && shown('doc-notes-panel') && !shown('doc-inspector');
+  document.getElementById('doc-notesClose').click();
+  const ok2=!document.body.classList.contains('doc-notes-open') && shown('doc-inspector');
+  window.DocEditor.edit(false); return ok && ok2;
+}));
+check('notes ui: compose captures the selection as target', await page.evaluate(async()=>{
+  const c=document.getElementById('doc-content'); c.innerHTML='<p id="qa-u1">패널에서 남기는 메모 대상 문장</p>';
+  const t=document.getElementById('qa-u1').firstChild, r=document.createRange(); r.setStart(t,0); r.setEnd(t,3);
+  const s=getSelection(); s.removeAllRanges(); s.addRange(r); await new Promise(res=>setTimeout(res,80));
+  document.getElementById('doc-notesBtn').click();
+  const target=document.getElementById('doc-notesTarget'), had=target.classList.contains('has') && target.querySelector('.q').textContent.includes('패널에');
+  const input=document.getElementById('doc-notesInput'); input.focus(); input.value='패널 메모';
+  document.getElementById('doc-notesAdd').click();
+  const card=document.querySelector('#doc-notesList .doc-ed-note-card'), mark=c.querySelector('mark.doc-ed-note');
+  return had && !target.classList.contains('has') && !!mark && mark.textContent==='패널에' && !!card && card.querySelector('.doc-ed-note-text').textContent==='패널 메모' && card.querySelector('.doc-ed-note-where q').textContent==='패널에' && document.getElementById('doc-notesCount').textContent==='1';
+}));
+check('notes ui: card click locates the mark, mark click opens the card', await page.evaluate(()=>{
+  document.querySelector('#doc-notesList .doc-ed-note-card').click();
+  const active=!!document.querySelector('#doc-content mark.doc-ed-note-active');
+  document.getElementById('doc-notesClose').click();
+  document.querySelector('#doc-content mark.doc-ed-note').click();
+  return active && document.body.classList.contains('doc-notes-open') && !!document.querySelector('#doc-notesList .doc-ed-note-card.active');
+}));
+check('notes ui: reply, resolve filter, reopen, delete', await page.evaluate(()=>{
+  const list=document.getElementById('doc-notesList');
+  list.querySelector('[data-act="reply"]').click(); list.querySelector('.doc-ed-note-replybox textarea').value='답글입니다'; list.querySelector('[data-act="send"]').click();
+  const replied=!!list.querySelector('.doc-ed-note-reply') && list.querySelector('.doc-ed-note-reply div').textContent==='답글입니다';
+  list.querySelector('[data-act="resolve"]').click();
+  const hiddenWhenResolved=!list.querySelector('.doc-ed-note-card') && document.getElementById('doc-notesCount').textContent==='';
+  const chk=document.getElementById('doc-notesShowResolved'); chk.checked=true; chk.dispatchEvent(new Event('change'));
+  const card=list.querySelector('.doc-ed-note-card.resolved'), collapsed=!!card && getComputedStyle(card.querySelector('.doc-ed-note-text')).display==='none';
+  card.click(); const opened=getComputedStyle(card.querySelector('.doc-ed-note-text')).display!=='none';
+  list.querySelector('[data-act="resolve"]').click();
+  const reopened=!!list.querySelector('.doc-ed-note-card:not(.resolved)');
+  list.querySelector('[data-act="remove"]').click();
+  return replied && hiddenWhenResolved && collapsed && opened && reopened && window.DocEditor.notes.list().length===0 && !document.querySelector('#doc-content mark.doc-ed-note');
+}));
+check('notes ui: a note that lost its mark shows a badge', await page.evaluate(()=>{
+  const c=document.getElementById('doc-content'), t=c.querySelector('p').firstChild, r=document.createRange(); r.setStart(t,0); r.setEnd(t,2);
+  const id=window.DocEditor.notes.add('곧 위치를 잃을 메모',{range:r});
+  document.querySelectorAll('mark[data-doc-note="'+id+'"]').forEach(m=>m.replaceWith(...m.childNodes));
+  document.getElementById('doc-notesShowResolved').dispatchEvent(new Event('change'));
+  return /위치 없음/.test(document.querySelector('#doc-notesList .doc-ed-note-card').textContent);
+}));
+check('notes ui: name field shows and stores the author', await page.evaluate(()=>{ const i=document.getElementById('doc-notesAuthor'), shown=i.value==='검토자'; i.value='새 이름'; i.dispatchEvent(new Event('change')); return shown && localStorage.getItem('docedit:author')==='새 이름'; }));
+check('notes ui: saved html has no open panel state or typed text', await page.evaluate(()=>{ document.getElementById('doc-notesInput').value='임시'; const d=new DOMParser().parseFromString(window.DocEditor.getHTML(),'text/html'); return !d.body.classList.contains('doc-notes-open') && d.getElementById('doc-notesList').innerHTML==='' && d.getElementById('doc-notesInput').textContent==='' && !d.getElementById('doc-notesAuthor').hasAttribute('value') && d.getElementById('doc-notesBtn').getAttribute('aria-expanded')==='false'; }));
+await page.evaluate(()=>{ document.getElementById('doc-notesInput').value=''; document.getElementById('doc-notesClose').click(); window.DocEditor.notes.list().forEach(n=>window.DocEditor.notes.remove(n.id)); localStorage.removeItem('docedit:autosave:url:'+location.origin+location.pathname); });
+
 console.log(JSON.stringify({pass:true,count:results.length,results}));

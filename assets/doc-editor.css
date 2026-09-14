@@ -103,6 +103,58 @@ body.doc-editing #doc-inspector{ display:block; }
 .doc-ed-ichip.on{ background:var(--doc-ed-accent-soft,#eef2ff); color:var(--doc-ed-accent-deep,#1d4ed8); border-color:var(--doc-ed-accent-line,#c7d2fe); }
 .doc-ed-insp-hint{ font-size:11.5px; color:var(--doc-ed-muted,#6b7280); padding:9px 15px 13px; border-top:1px solid var(--doc-ed-hair,#eef0f2); line-height:1.55; }
 
+/* ---------- 메모 패널 (보기·편집 모두 · 우측 플로팅 · 인스펙터와 같은 자리) ---------- */
+.doc-ed-count{ display:inline-block; min-width:18px; margin-left:6px; padding:0 5px; border-radius:9px; background:var(--doc-ed-accent,#2563eb); color:#fff; font-size:11px; line-height:18px; text-align:center; }
+.doc-ed-count:empty{ display:none; }
+.doc-ed-btn.on .doc-ed-count{ background:#fff; color:var(--doc-ed-accent,#2563eb); }
+#doc-notes-panel{
+  position:fixed; top:calc(var(--doc-ed-tools-bottom,0px) + 8px); right:14px; width:320px; z-index:2147483000;
+  max-height:calc(var(--doc-ed-visible-height,100vh) - var(--doc-ed-tools-bottom,0px) - 24px); overflow:auto; display:none;
+  font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
+}
+body:not(.doc-editing) #doc-notes-panel{ top:calc(var(--doc-ed-tools-bottom,0px) + var(--doc-ed-controls-height,44px) + 24px); max-height:calc(var(--doc-ed-visible-height,100vh) - var(--doc-ed-tools-bottom,0px) - var(--doc-ed-controls-height,44px) - 40px); }
+body.doc-notes-open #doc-notes-panel{ display:block; }
+body.doc-notes-open #doc-inspector{ display:none; }
+#doc-notes-panel .doc-ed-insp-h .doc-ed-btn{ margin-left:auto; }
+.doc-ed-notes-author{ display:flex; align-items:center; gap:8px; padding:8px 15px; border-bottom:1px solid var(--doc-ed-hair,#eef0f2); font-size:12px; font-weight:600; color:var(--doc-ed-muted,#6b7280); }
+.doc-ed-notes-author input{ flex:1; min-width:0; height:30px; border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:7px; padding:0 8px; font:inherit; font-size:13px; color:var(--doc-ed-ink,#1f2937); background:#fff; }
+.doc-ed-notes-compose{ padding:10px 15px; border-bottom:1px solid var(--doc-ed-hair,#eef0f2); }
+#doc-notesTarget{ display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--doc-ed-muted,#6b7280); margin-bottom:6px; }
+#doc-notesTarget .k{ font-weight:700; flex:none; }
+#doc-notesTarget .q{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#doc-notesTarget.has .q{ color:var(--doc-ed-accent-deep,#1d4ed8); font-weight:700; }
+#doc-notesTargetClear{ flex:none; border:none; background:none; color:var(--doc-ed-muted,#6b7280); cursor:pointer; font-size:15px; line-height:1; padding:2px 5px; }
+#doc-notesInput{ display:block; width:100%; min-height:64px; border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:8px; padding:8px; font:inherit; font-size:13px; line-height:1.5; color:var(--doc-ed-ink,#1f2937); background:#fff; resize:vertical; }
+#doc-notesInput:disabled{ background:var(--doc-ed-paper-2,#f8fafc); color:var(--doc-ed-muted,#6b7280); }
+.doc-ed-notes-compose-actions{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; }
+.doc-ed-notes-filter{ font-size:12px; color:var(--doc-ed-muted,#6b7280); display:flex; align-items:center; gap:4px; cursor:pointer; }
+.doc-ed-notes-hint{ font-size:12px; color:#b45309; margin-top:6px; }
+#doc-notesList{ padding:8px 10px 12px; }
+.doc-ed-note-card{ border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:10px; padding:9px 11px; margin-bottom:8px; background:#fff; cursor:pointer; }
+.doc-ed-note-card.active{ border-color:var(--doc-ed-accent,#2563eb); box-shadow:0 0 0 2px var(--doc-ed-accent-line,#c7d2fe); }
+.doc-ed-note-head{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:11.5px; color:var(--doc-ed-muted,#6b7280); }
+.doc-ed-note-head strong{ color:var(--doc-ed-ink,#1f2937); font-size:12.5px; }
+.doc-ed-note-badge{ font-size:10.5px; padding:1px 6px; border-radius:6px; background:var(--doc-ed-paper-2,#f8fafc); border:1px solid var(--doc-ed-hair,#eef0f2); color:var(--doc-ed-muted,#6b7280); font-weight:700; }
+.doc-ed-note-badge.ok{ background:#ecfdf5; border-color:#a7f3d0; color:#047857; }
+.doc-ed-note-where{ font-size:11.5px; color:var(--doc-ed-muted,#6b7280); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.doc-ed-note-text{ font-size:13px; line-height:1.55; color:var(--doc-ed-ink,#1f2937); margin-top:6px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.doc-ed-note-replies{ margin-top:8px; padding-left:10px; border-left:2px solid var(--doc-ed-hair,#eef0f2); }
+.doc-ed-note-reply{ font-size:12.5px; margin-top:6px; color:var(--doc-ed-ink,#1f2937); }
+.doc-ed-note-reply strong{ font-size:12px; margin-right:6px; }
+.doc-ed-note-reply span{ font-size:11px; color:var(--doc-ed-muted,#6b7280); }
+.doc-ed-note-reply div{ white-space:pre-wrap; overflow-wrap:anywhere; }
+.doc-ed-note-actions{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+.doc-ed-note-actions .doc-ed-btn{ padding:4px 9px; font-size:11.5px; box-shadow:none; }
+.doc-ed-note-replybox{ margin-top:8px; }
+.doc-ed-note-replybox textarea{ display:block; width:100%; border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:8px; padding:6px 8px; font:inherit; font-size:12.5px; margin-bottom:6px; background:#fff; color:var(--doc-ed-ink,#1f2937); }
+.doc-ed-note-card.resolved{ opacity:.78; }
+.doc-ed-note-card.resolved:not(.open) .doc-ed-note-text, .doc-ed-note-card.resolved:not(.open) .doc-ed-note-replies,
+.doc-ed-note-card.resolved:not(.open) .doc-ed-note-actions, .doc-ed-note-card.resolved:not(.open) .doc-ed-note-replybox{ display:none; }
+/* 본문 하이라이트 (글자색은 문서 것) */
+#doc-content mark.doc-ed-note{ background:rgba(250,204,21,.35); color:inherit; border-bottom:2px solid #f59e0b; cursor:pointer; padding:0; }
+#doc-content mark.doc-ed-note.doc-ed-note-resolved{ background:none; border-bottom:1px dotted #d97706; }
+#doc-content mark.doc-ed-note.doc-ed-note-active{ background:rgba(245,158,11,.55); outline:2px solid #f59e0b; outline-offset:1px; }
+
 /* ---------- 편집 affordance (문서 클래스 비의존 범용 셀렉터) ---------- */
 body.doc-editing #doc-content{ outline:none; }
 body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th,dd,dt,blockquote,figcaption):hover{
@@ -166,11 +218,11 @@ body.doc-editing #doc-editflag{
 #doc-more-actions{ display:flex; gap:6px; }
 #doc-attachFile{ display:none!important; }
 #doc-moreToggle, #doc-inspectorToggle, #doc-inspectorClose{ display:none; }
-#doc-controls *, #doc-editbar *, #doc-inspector *, #doc-history-modal *{ box-sizing:border-box; }
-#doc-controls, #doc-editbar, #doc-inspector, #doc-history-modal{ box-sizing:border-box; }
+#doc-controls *, #doc-editbar *, #doc-inspector *, #doc-notes-panel *, #doc-changes-bar *, #doc-history-modal *{ box-sizing:border-box; }
+#doc-controls, #doc-editbar, #doc-inspector, #doc-notes-panel, #doc-changes-bar, #doc-history-modal{ box-sizing:border-box; }
 #doc-controls button, #doc-editbar button, #doc-inspectorClose{ touch-action:manipulation; }
 #doc-controls button:focus-visible, #doc-editbar :is(button,select,input):focus-visible,
-#doc-inspectorClose:focus-visible{ outline:2px solid var(--doc-ed-accent,#2563eb); outline-offset:2px; }
+#doc-inspectorClose:focus-visible, #doc-notes-panel :is(button,input,textarea):focus-visible{ outline:2px solid var(--doc-ed-accent,#2563eb); outline-offset:2px; }
 #doc-content{ scroll-margin-top:calc(var(--doc-ed-tools-bottom,0px) + 16px); }
 body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-top:calc(var(--doc-ed-tools-bottom,0px) + 16px); }
 .doc-ed-modal-body, #doc-hist-preview{ min-width:0; }
@@ -210,6 +262,12 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   body.doc-editing #doc-inspector{ display:none; }
   body.doc-editing.doc-inspector-open #doc-inspector{ display:block; }
   #doc-inspector{ left:8px; right:8px; width:auto; }
+  #doc-notes-panel{ left:8px; right:8px; width:auto; }
+  body:not(.doc-editing) #doc-notes-panel{ top:calc(var(--doc-ed-tools-bottom,60px) + 8px); max-height:calc(var(--doc-ed-visible-height,100dvh) - var(--doc-ed-tools-bottom,60px) - 24px); }
+  body.doc-editing #doc-notesBtn{ display:none; }
+  #doc-notesClose{ min-height:44px; }
+  #doc-notes-panel .doc-ed-insp-h{ padding:6px 12px; }
+  .doc-ed-note-actions .doc-ed-btn, #doc-notesAdd{ min-height:44px; }
   #doc-inspectorClose{ display:block; margin-left:auto; min-height:44px; }
   #doc-inspector .doc-ed-insp-h{ padding:6px 12px; }
   body.doc-editing #doc-editflag{ display:none; }
@@ -227,6 +285,6 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
 
 /* ---------- 인쇄: 크롬 전부 숨김 ---------- */
 @media print{
-  #doc-controls, #doc-editbar, #doc-inspector, #doc-editflag,
+  #doc-controls, #doc-editbar, #doc-inspector, #doc-notes-panel, #doc-changes-bar, #doc-editflag,
   #doc-restore-banner, #doc-toast, .doc-ed-modal{ display:none !important; }
 }

@@ -28,7 +28,7 @@
   function getContentHtml(){ return comparing?pristineHtml:content.innerHTML; }
   function sanitizeNotes(arr){
     if(!Array.isArray(arr)) return [];
-    var seen={};
+    var seen=Object.create(null);
     return arr.filter(function(v){ if(!(v && typeof v.id==='string' && /^[A-Za-z0-9_-]+$/.test(v.id) && typeof v.text==='string') || seen[v.id]) return false; seen[v.id]=true; return true; }).map(function(v){
       return {id:v.id, author:typeof v.author==='string'?v.author:'', ts:typeof v.ts==='string'?v.ts:'', text:v.text, quote:typeof v.quote==='string'?v.quote:'', anchored:!!v.anchored, resolved:!!v.resolved,
         replies:Array.isArray(v.replies)?v.replies.filter(function(r){ return r && typeof r.text==='string'; }).map(function(r){ return {author:typeof r.author==='string'?r.author:'', ts:typeof r.ts==='string'?r.ts:'', text:r.text}; }):[]};
@@ -161,7 +161,81 @@
   }
   function noteHasAnchor(id){ return noteMarks(id).length>0; }
   function afterNotesChange(){ reconcileNotes(); renderNotes(); scheduleAutosave(); }
-  function renderNotes(){ var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'); if(count) count.textContent=open?String(open):''; if(btn) btn.title=open?('미해결 메모 '+open+'개'):'메모 보기·남기기'; }
+
+  /* ---------- 메모 패널 ---------- */
+  function setNotes(on){
+    body.classList.toggle('doc-notes-open',on);
+    var t=$('doc-notesBtn'); if(t) t.setAttribute('aria-expanded',String(on));
+    if(on){ setInspector(false); setMore(false); captureTarget(); renderNotes(); }
+  }
+  // 작성 상자에 포커스가 올 때의 본문 선택을 메모 대상으로 잡는다. 선택이 없으면 문서 전체.
+  function captureTarget(){ noteTarget=comparing?null:targetFrom(savedRange); showTarget(); }
+  function clearTarget(){ noteTarget=null; showTarget(); }
+  function showTarget(){
+    var t=$('doc-notesTarget'), hint=$('doc-notesHint'), input=$('doc-notesInput'), add=$('doc-notesAdd'), q, x;
+    if(t){ q=t.querySelector('.q'); x=$('doc-notesTargetClear'); t.classList.toggle('has',!!noteTarget); if(q) q.textContent=noteTarget?('“'+noteTarget.quote+'”'):'문서 전체'; if(x) x.hidden=!noteTarget; }
+    if(hint) hint.hidden=!comparing; if(input) input.disabled=comparing; if(add) add.disabled=comparing;
+  }
+  function locateNote(id){
+    var marks=noteMarks(id), i;
+    content.querySelectorAll('.doc-ed-note-active').forEach(function(m){m.classList.remove('doc-ed-note-active');});
+    if(!marks.length){ toast('본문에서 이 메모의 위치를 찾을 수 없습니다.'); return; }
+    for(i=0;i<marks.length;i++) marks[i].classList.add('doc-ed-note-active');
+    marks[0].scrollIntoView({block:'center',behavior:'smooth'});
+    clearTimeout(locateTimer); locateTimer=setTimeout(function(){ content.querySelectorAll('.doc-ed-note-active').forEach(function(m){m.classList.remove('doc-ed-note-active');}); },1500);
+  }
+  function highlightCard(id){
+    var list=$('doc-notesList'), chk=$('doc-notesShowResolved'), card; if(!list) return;
+    card=list.querySelector('[data-note-id="'+id+'"]');
+    if(!card && chk && !chk.checked){ chk.checked=true; renderNotes(); card=list.querySelector('[data-note-id="'+id+'"]'); }
+    if(!card) return;
+    list.querySelectorAll('.doc-ed-note-card.active').forEach(function(c){c.classList.remove('active');});
+    card.classList.add('active'); card.classList.add('open'); card.scrollIntoView({block:'nearest'});
+  }
+  function noteCard(n){
+    var card=document.createElement('article'), orphan=n.anchored&&!noteHasAnchor(n.id), where;
+    card.className='doc-ed-note-card'+(n.resolved?' resolved':''); card.setAttribute('data-note-id',n.id);
+    where=n.anchored?(orphan?'<span class="doc-ed-note-badge">위치 없음</span> ':''):'<span class="doc-ed-note-badge">문서 전체</span>';
+    card.innerHTML='<div class="doc-ed-note-head"><strong>'+escapeHtml(n.author||'이름 없음')+'</strong><span>'+fmtTs(n.ts)+'</span>'+(n.resolved?'<span class="doc-ed-note-badge ok">해결됨</span>':'')+'</div>'
+      +'<div class="doc-ed-note-where">'+where+(n.quote?'<q>'+escapeHtml(n.quote)+'</q>':'')+'</div>'
+      +'<div class="doc-ed-note-text">'+escapeHtml(n.text)+'</div>'
+      +(n.replies.length?'<div class="doc-ed-note-replies">'+n.replies.map(function(r){ return '<div class="doc-ed-note-reply"><strong>'+escapeHtml(r.author||'이름 없음')+'</strong><span>'+fmtTs(r.ts)+'</span><div>'+escapeHtml(r.text)+'</div></div>'; }).join('')+'</div>':'')
+      +'<div class="doc-ed-note-actions"><button type="button" class="doc-ed-btn" data-act="reply">답글</button><button type="button" class="doc-ed-btn" data-act="resolve">'+(n.resolved?'다시 열기':'해결')+'</button><button type="button" class="doc-ed-btn ghost" data-act="remove">삭제</button></div>'
+      +'<div class="doc-ed-note-replybox" hidden><textarea rows="2" placeholder="답글"></textarea><button type="button" class="doc-ed-btn primary" data-act="send">남기기</button></div>';
+    return card;
+  }
+  function renderNotes(){
+    var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'), list=$('doc-notesList'), chk=$('doc-notesShowResolved'), showResolved=!!(chk&&chk.checked), shown=[], i;
+    if(count) count.textContent=open?String(open):''; if(btn) btn.title=open?('미해결 메모 '+open+'개'):'메모 보기·남기기';
+    showTarget();
+    if(!list) return; list.innerHTML='';
+    for(i=0;i<notes.length;i++) if(showResolved||!notes[i].resolved) shown.push(notes[i]);
+    if(!shown.length){ list.innerHTML='<p class="doc-ed-muted" style="font-size:13px;margin:6px 4px">'+(notes.length?'해결되지 않은 메모가 없습니다.':'메모가 없습니다. 본문을 선택하고 위에 남겨 보세요.')+'</p>'; return; }
+    for(i=0;i<shown.length;i++) list.appendChild(noteCard(shown[i]));
+  }
+  bind('doc-notesBtn','click',function(){ setNotes(!body.classList.contains('doc-notes-open')); });
+  bind('doc-notesClose','click',function(){ setNotes(false); var t=$('doc-notesBtn'); if(t) t.focus(); });
+  bind('doc-ebNote','click',function(){ setNotes(true); var input=$('doc-notesInput'); if(input && !input.disabled) input.focus(); });
+  bind('doc-notesInput','focus',captureTarget);
+  bind('doc-notesTargetClear','click',clearTarget);
+  bind('doc-notesAdd','click',function(){ var input=$('doc-notesInput'); if(!input) return; var n=addNote(input.value,noteTarget); if(n){ input.value=''; noteTarget=null; showTarget(); highlightCard(n.id); } });
+  bind('doc-notesShowResolved','change',renderNotes);
+  bind('doc-notesAuthor','change',function(){ storeAuthor(this.value.trim()); });
+  (function(){
+    var panel=$('doc-notes-panel'), list=$('doc-notesList'); if(!panel) return;
+    panel.addEventListener('mousedown',function(e){ if(e.target.closest('button')) e.preventDefault(); });
+    if(list) list.addEventListener('click',function(e){
+      var card=e.target.closest('.doc-ed-note-card'), act, id, a, box, ta, n, ok;
+      if(!card) return; id=card.getAttribute('data-note-id'); act=e.target.closest('[data-act]');
+      if(!act){ if(e.target.closest('textarea')) return; card.classList.toggle('open'); locateNote(id); return; }
+      a=act.getAttribute('data-act');
+      if(a==='reply'){ box=card.querySelector('.doc-ed-note-replybox'); box.hidden=!box.hidden; if(!box.hidden) box.querySelector('textarea').focus(); }
+      else if(a==='send'){ ta=card.querySelector('.doc-ed-note-replybox textarea'); if(replyNote(id,ta.value)) highlightCard(id); }
+      else if(a==='resolve'){ n=findNote(id); if(n) resolveNote(id,!n.resolved); }
+      else if(a==='remove'){ ok=true; try{ ok=window.confirm('이 메모와 답글을 삭제할까요?'); }catch(err){} if(ok) removeNote(id); }
+    });
+  })();
+  content.addEventListener('click',function(e){ var m=e.target.closest?e.target.closest('mark.doc-ed-note'):null; if(m && content.contains(m)){ setNotes(true); highlightCard(m.getAttribute('data-doc-note')); } });
 
   /* ---------- 편집 모드 ---------- */
   function setEdit(on){
@@ -209,12 +283,13 @@
     setInspector(false); setMore(this.getAttribute('aria-expanded')!=='true');
   });
   bind('doc-inspectorToggle','click',function(){
-    setMore(false);setInspector(this.getAttribute('aria-expanded')!=='true');
+    setMore(false);setNotes(false);setInspector(this.getAttribute('aria-expanded')!=='true');
   });
   bind('doc-inspectorClose','click',function(){setInspector(false);var t=$('doc-inspectorToggle');if(t)t.focus();});
   document.addEventListener('pointerdown',function(e){
     var controls=$('doc-controls');if(controls && !controls.contains(e.target))setMore(false);
     if(content.contains(e.target))setInspector(false);
+    if(content.contains(e.target) && window.matchMedia('(max-width:900px)').matches) setNotes(false);
   });
   var moreActions=$('doc-more-actions');if(moreActions)moreActions.addEventListener('click',function(e){if(e.target.closest('button'))setMore(false);});
 
@@ -498,7 +573,7 @@
   bind('doc-printBtn','click', function(){ if(editing) setEdit(false); window.print(); });
   var hm=$('doc-history-modal'); if(hm) hm.addEventListener('mousedown', function(e){ if(e.target===this) this.classList.remove('open'); });
   document.addEventListener('keydown', function(e){
-    if(e.key==='Escape'){setMore(false);setInspector(false);var m=$('doc-history-modal');if(m)m.classList.remove('open');}
+    if(e.key==='Escape'){setMore(false);setInspector(false);setNotes(false);var m=$('doc-history-modal');if(m)m.classList.remove('open');}
     if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==='s'||e.key==='S')){ e.preventDefault(); saveToFile(false); }
     if((e.metaKey||e.ctrlKey)&&(e.key==='e'||e.key==='E')){ e.preventDefault(); setEdit(!editing); }
   });
@@ -511,7 +586,8 @@
   /* ---------- 초기화 ---------- */
   try{ document.execCommand('styleWithCSS',false,true); }catch(e){}
   updateEditorLayout();
-  reconcileNotes(); renderNotes(); lastSavedHtml=content.innerHTML; lastBackedUpHtml=lastSavedHtml;
+  var authorInput=$('doc-notesAuthor'); if(authorInput) authorInput.value=currentAuthor();
+  reconcileNotes(); renderNotes(); lastSavedHtml=content.innerHTML; lastBackedUpHtml=lastSavedHtml; lastBackedUpNotes=JSON.stringify(notes);
   checkAutosave();
   (function(){ var by=body.dataset.docSavedBy||''; if(by && by!==currentAuthor() && history.length) toast(by+'이(가) 저장한 문서입니다. 변경 사항으로 수정된 부분을 볼 수 있습니다.',6000); })();
 

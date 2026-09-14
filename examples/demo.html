@@ -213,6 +213,58 @@ body.doc-editing #doc-inspector{ display:block; }
 .doc-ed-ichip.on{ background:var(--doc-ed-accent-soft,#eef2ff); color:var(--doc-ed-accent-deep,#1d4ed8); border-color:var(--doc-ed-accent-line,#c7d2fe); }
 .doc-ed-insp-hint{ font-size:11.5px; color:var(--doc-ed-muted,#6b7280); padding:9px 15px 13px; border-top:1px solid var(--doc-ed-hair,#eef0f2); line-height:1.55; }
 
+/* ---------- 메모 패널 (보기·편집 모두 · 우측 플로팅 · 인스펙터와 같은 자리) ---------- */
+.doc-ed-count{ display:inline-block; min-width:18px; margin-left:6px; padding:0 5px; border-radius:9px; background:var(--doc-ed-accent,#2563eb); color:#fff; font-size:11px; line-height:18px; text-align:center; }
+.doc-ed-count:empty{ display:none; }
+.doc-ed-btn.on .doc-ed-count{ background:#fff; color:var(--doc-ed-accent,#2563eb); }
+#doc-notes-panel{
+  position:fixed; top:calc(var(--doc-ed-tools-bottom,0px) + 8px); right:14px; width:320px; z-index:2147483000;
+  max-height:calc(var(--doc-ed-visible-height,100vh) - var(--doc-ed-tools-bottom,0px) - 24px); overflow:auto; display:none;
+  font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
+}
+body:not(.doc-editing) #doc-notes-panel{ top:calc(var(--doc-ed-tools-bottom,0px) + var(--doc-ed-controls-height,44px) + 24px); max-height:calc(var(--doc-ed-visible-height,100vh) - var(--doc-ed-tools-bottom,0px) - var(--doc-ed-controls-height,44px) - 40px); }
+body.doc-notes-open #doc-notes-panel{ display:block; }
+body.doc-notes-open #doc-inspector{ display:none; }
+#doc-notes-panel .doc-ed-insp-h .doc-ed-btn{ margin-left:auto; }
+.doc-ed-notes-author{ display:flex; align-items:center; gap:8px; padding:8px 15px; border-bottom:1px solid var(--doc-ed-hair,#eef0f2); font-size:12px; font-weight:600; color:var(--doc-ed-muted,#6b7280); }
+.doc-ed-notes-author input{ flex:1; min-width:0; height:30px; border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:7px; padding:0 8px; font:inherit; font-size:13px; color:var(--doc-ed-ink,#1f2937); background:#fff; }
+.doc-ed-notes-compose{ padding:10px 15px; border-bottom:1px solid var(--doc-ed-hair,#eef0f2); }
+#doc-notesTarget{ display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--doc-ed-muted,#6b7280); margin-bottom:6px; }
+#doc-notesTarget .k{ font-weight:700; flex:none; }
+#doc-notesTarget .q{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#doc-notesTarget.has .q{ color:var(--doc-ed-accent-deep,#1d4ed8); font-weight:700; }
+#doc-notesTargetClear{ flex:none; border:none; background:none; color:var(--doc-ed-muted,#6b7280); cursor:pointer; font-size:15px; line-height:1; padding:2px 5px; }
+#doc-notesInput{ display:block; width:100%; min-height:64px; border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:8px; padding:8px; font:inherit; font-size:13px; line-height:1.5; color:var(--doc-ed-ink,#1f2937); background:#fff; resize:vertical; }
+#doc-notesInput:disabled{ background:var(--doc-ed-paper-2,#f8fafc); color:var(--doc-ed-muted,#6b7280); }
+.doc-ed-notes-compose-actions{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; }
+.doc-ed-notes-filter{ font-size:12px; color:var(--doc-ed-muted,#6b7280); display:flex; align-items:center; gap:4px; cursor:pointer; }
+.doc-ed-notes-hint{ font-size:12px; color:#b45309; margin-top:6px; }
+#doc-notesList{ padding:8px 10px 12px; }
+.doc-ed-note-card{ border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:10px; padding:9px 11px; margin-bottom:8px; background:#fff; cursor:pointer; }
+.doc-ed-note-card.active{ border-color:var(--doc-ed-accent,#2563eb); box-shadow:0 0 0 2px var(--doc-ed-accent-line,#c7d2fe); }
+.doc-ed-note-head{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:11.5px; color:var(--doc-ed-muted,#6b7280); }
+.doc-ed-note-head strong{ color:var(--doc-ed-ink,#1f2937); font-size:12.5px; }
+.doc-ed-note-badge{ font-size:10.5px; padding:1px 6px; border-radius:6px; background:var(--doc-ed-paper-2,#f8fafc); border:1px solid var(--doc-ed-hair,#eef0f2); color:var(--doc-ed-muted,#6b7280); font-weight:700; }
+.doc-ed-note-badge.ok{ background:#ecfdf5; border-color:#a7f3d0; color:#047857; }
+.doc-ed-note-where{ font-size:11.5px; color:var(--doc-ed-muted,#6b7280); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.doc-ed-note-text{ font-size:13px; line-height:1.55; color:var(--doc-ed-ink,#1f2937); margin-top:6px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.doc-ed-note-replies{ margin-top:8px; padding-left:10px; border-left:2px solid var(--doc-ed-hair,#eef0f2); }
+.doc-ed-note-reply{ font-size:12.5px; margin-top:6px; color:var(--doc-ed-ink,#1f2937); }
+.doc-ed-note-reply strong{ font-size:12px; margin-right:6px; }
+.doc-ed-note-reply span{ font-size:11px; color:var(--doc-ed-muted,#6b7280); }
+.doc-ed-note-reply div{ white-space:pre-wrap; overflow-wrap:anywhere; }
+.doc-ed-note-actions{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+.doc-ed-note-actions .doc-ed-btn{ padding:4px 9px; font-size:11.5px; box-shadow:none; }
+.doc-ed-note-replybox{ margin-top:8px; }
+.doc-ed-note-replybox textarea{ display:block; width:100%; border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:8px; padding:6px 8px; font:inherit; font-size:12.5px; margin-bottom:6px; background:#fff; color:var(--doc-ed-ink,#1f2937); }
+.doc-ed-note-card.resolved{ opacity:.78; }
+.doc-ed-note-card.resolved:not(.open) .doc-ed-note-text, .doc-ed-note-card.resolved:not(.open) .doc-ed-note-replies,
+.doc-ed-note-card.resolved:not(.open) .doc-ed-note-actions, .doc-ed-note-card.resolved:not(.open) .doc-ed-note-replybox{ display:none; }
+/* 본문 하이라이트 (글자색은 문서 것) */
+#doc-content mark.doc-ed-note{ background:rgba(250,204,21,.35); color:inherit; border-bottom:2px solid #f59e0b; cursor:pointer; padding:0; }
+#doc-content mark.doc-ed-note.doc-ed-note-resolved{ background:none; border-bottom:1px dotted #d97706; }
+#doc-content mark.doc-ed-note.doc-ed-note-active{ background:rgba(245,158,11,.55); outline:2px solid #f59e0b; outline-offset:1px; }
+
 /* ---------- 편집 affordance (문서 클래스 비의존 범용 셀렉터) ---------- */
 body.doc-editing #doc-content{ outline:none; }
 body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th,dd,dt,blockquote,figcaption):hover{
@@ -276,11 +328,11 @@ body.doc-editing #doc-editflag{
 #doc-more-actions{ display:flex; gap:6px; }
 #doc-attachFile{ display:none!important; }
 #doc-moreToggle, #doc-inspectorToggle, #doc-inspectorClose{ display:none; }
-#doc-controls *, #doc-editbar *, #doc-inspector *, #doc-history-modal *{ box-sizing:border-box; }
-#doc-controls, #doc-editbar, #doc-inspector, #doc-history-modal{ box-sizing:border-box; }
+#doc-controls *, #doc-editbar *, #doc-inspector *, #doc-notes-panel *, #doc-changes-bar *, #doc-history-modal *{ box-sizing:border-box; }
+#doc-controls, #doc-editbar, #doc-inspector, #doc-notes-panel, #doc-changes-bar, #doc-history-modal{ box-sizing:border-box; }
 #doc-controls button, #doc-editbar button, #doc-inspectorClose{ touch-action:manipulation; }
 #doc-controls button:focus-visible, #doc-editbar :is(button,select,input):focus-visible,
-#doc-inspectorClose:focus-visible{ outline:2px solid var(--doc-ed-accent,#2563eb); outline-offset:2px; }
+#doc-inspectorClose:focus-visible, #doc-notes-panel :is(button,input,textarea):focus-visible{ outline:2px solid var(--doc-ed-accent,#2563eb); outline-offset:2px; }
 #doc-content{ scroll-margin-top:calc(var(--doc-ed-tools-bottom,0px) + 16px); }
 body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-top:calc(var(--doc-ed-tools-bottom,0px) + 16px); }
 .doc-ed-modal-body, #doc-hist-preview{ min-width:0; }
@@ -320,6 +372,12 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   body.doc-editing #doc-inspector{ display:none; }
   body.doc-editing.doc-inspector-open #doc-inspector{ display:block; }
   #doc-inspector{ left:8px; right:8px; width:auto; }
+  #doc-notes-panel{ left:8px; right:8px; width:auto; }
+  body:not(.doc-editing) #doc-notes-panel{ top:calc(var(--doc-ed-tools-bottom,60px) + 8px); max-height:calc(var(--doc-ed-visible-height,100dvh) - var(--doc-ed-tools-bottom,60px) - 24px); }
+  body.doc-editing #doc-notesBtn{ display:none; }
+  #doc-notesClose{ min-height:44px; }
+  #doc-notes-panel .doc-ed-insp-h{ padding:6px 12px; }
+  .doc-ed-note-actions .doc-ed-btn, #doc-notesAdd{ min-height:44px; }
   #doc-inspectorClose{ display:block; margin-left:auto; min-height:44px; }
   #doc-inspector .doc-ed-insp-h{ padding:6px 12px; }
   body.doc-editing #doc-editflag{ display:none; }
@@ -337,7 +395,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
 
 /* ---------- 인쇄: 크롬 전부 숨김 ---------- */
 @media print{
-  #doc-controls, #doc-editbar, #doc-inspector, #doc-editflag,
+  #doc-controls, #doc-editbar, #doc-inspector, #doc-notes-panel, #doc-changes-bar, #doc-editflag,
   #doc-restore-banner, #doc-toast, .doc-ed-modal{ display:none !important; }
 }
 
@@ -351,6 +409,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
 <div id="doc-controls">
   <button class="doc-ed-btn" id="doc-editToggle" title="편집 모드 (Cmd/Ctrl+E)">✎ 편집</button>
   <button class="doc-ed-btn primary" id="doc-saveBtn" title="최초 저장 시 대상 파일 선택 (Cmd/Ctrl+S)">저장</button>
+  <button class="doc-ed-btn" id="doc-notesBtn" aria-expanded="false" aria-controls="doc-notes-panel" title="메모 보기·남기기">메모<span class="doc-ed-count" id="doc-notesCount"></span></button>
   <button class="doc-ed-btn" id="doc-inspectorToggle" aria-expanded="false" aria-controls="doc-inspector">현재 서식</button>
   <button class="doc-ed-btn" id="doc-moreToggle" aria-expanded="false" aria-controls="doc-more-actions">더보기 ▾</button>
   <div id="doc-more-actions">
@@ -405,6 +464,9 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     <button class="doc-ed-eb" id="doc-ebTable" title="표 삽입">표</button>
     <button class="doc-ed-eb" data-cmd="removeFormat" title="서식 지우기">서식↺</button>
   </div>
+  <div class="doc-ed-g">
+    <button class="doc-ed-eb" id="doc-ebNote" title="선택한 부분에 메모 남기기">메모</button>
+  </div>
 </div>
 
 <aside id="doc-inspector">
@@ -422,6 +484,19 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
       </span></span></div>
     </div>
     <div class="doc-ed-insp-hint">내용을 클릭하면 그 위치의 서식이 표시됩니다. 위 툴바로 바꿀 수 있어요.</div>
+  </div>
+</aside>
+<aside id="doc-notes-panel" aria-label="메모">
+  <div class="doc-ed-insp-card">
+    <div class="doc-ed-insp-h"><span class="d"></span>메모<button class="doc-ed-btn" id="doc-notesClose" aria-label="메모 닫기">닫기</button></div>
+    <div class="doc-ed-notes-author"><label for="doc-notesAuthor">이름</label><input id="doc-notesAuthor" type="text" placeholder="메모와 저장 기록에 표시" autocomplete="off"></div>
+    <div class="doc-ed-notes-compose">
+      <div id="doc-notesTarget"><span class="k">대상</span><span class="q">문서 전체</span><button type="button" id="doc-notesTargetClear" title="문서 전체 메모로 바꾸기" hidden>×</button></div>
+      <textarea id="doc-notesInput" rows="3" placeholder="본문을 선택한 뒤 여기에 쓰면 그 부분에 붙습니다. 선택이 없으면 문서 전체 메모입니다."></textarea>
+      <div class="doc-ed-notes-compose-actions"><label class="doc-ed-notes-filter"><input type="checkbox" id="doc-notesShowResolved"> 해결된 메모 보기</label><button type="button" class="doc-ed-btn primary" id="doc-notesAdd">남기기</button></div>
+      <div class="doc-ed-notes-hint" id="doc-notesHint" hidden>비교를 닫고 메모를 남겨 주세요.</div>
+    </div>
+    <div id="doc-notesList"></div>
   </div>
 </aside>
 
@@ -930,7 +1005,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   function getContentHtml(){ return comparing?pristineHtml:content.innerHTML; }
   function sanitizeNotes(arr){
     if(!Array.isArray(arr)) return [];
-    var seen={};
+    var seen=Object.create(null);
     return arr.filter(function(v){ if(!(v && typeof v.id==='string' && /^[A-Za-z0-9_-]+$/.test(v.id) && typeof v.text==='string') || seen[v.id]) return false; seen[v.id]=true; return true; }).map(function(v){
       return {id:v.id, author:typeof v.author==='string'?v.author:'', ts:typeof v.ts==='string'?v.ts:'', text:v.text, quote:typeof v.quote==='string'?v.quote:'', anchored:!!v.anchored, resolved:!!v.resolved,
         replies:Array.isArray(v.replies)?v.replies.filter(function(r){ return r && typeof r.text==='string'; }).map(function(r){ return {author:typeof r.author==='string'?r.author:'', ts:typeof r.ts==='string'?r.ts:'', text:r.text}; }):[]};
@@ -1063,7 +1138,81 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   }
   function noteHasAnchor(id){ return noteMarks(id).length>0; }
   function afterNotesChange(){ reconcileNotes(); renderNotes(); scheduleAutosave(); }
-  function renderNotes(){ var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'); if(count) count.textContent=open?String(open):''; if(btn) btn.title=open?('미해결 메모 '+open+'개'):'메모 보기·남기기'; }
+
+  /* ---------- 메모 패널 ---------- */
+  function setNotes(on){
+    body.classList.toggle('doc-notes-open',on);
+    var t=$('doc-notesBtn'); if(t) t.setAttribute('aria-expanded',String(on));
+    if(on){ setInspector(false); setMore(false); captureTarget(); renderNotes(); }
+  }
+  // 작성 상자에 포커스가 올 때의 본문 선택을 메모 대상으로 잡는다. 선택이 없으면 문서 전체.
+  function captureTarget(){ noteTarget=comparing?null:targetFrom(savedRange); showTarget(); }
+  function clearTarget(){ noteTarget=null; showTarget(); }
+  function showTarget(){
+    var t=$('doc-notesTarget'), hint=$('doc-notesHint'), input=$('doc-notesInput'), add=$('doc-notesAdd'), q, x;
+    if(t){ q=t.querySelector('.q'); x=$('doc-notesTargetClear'); t.classList.toggle('has',!!noteTarget); if(q) q.textContent=noteTarget?('“'+noteTarget.quote+'”'):'문서 전체'; if(x) x.hidden=!noteTarget; }
+    if(hint) hint.hidden=!comparing; if(input) input.disabled=comparing; if(add) add.disabled=comparing;
+  }
+  function locateNote(id){
+    var marks=noteMarks(id), i;
+    content.querySelectorAll('.doc-ed-note-active').forEach(function(m){m.classList.remove('doc-ed-note-active');});
+    if(!marks.length){ toast('본문에서 이 메모의 위치를 찾을 수 없습니다.'); return; }
+    for(i=0;i<marks.length;i++) marks[i].classList.add('doc-ed-note-active');
+    marks[0].scrollIntoView({block:'center',behavior:'smooth'});
+    clearTimeout(locateTimer); locateTimer=setTimeout(function(){ content.querySelectorAll('.doc-ed-note-active').forEach(function(m){m.classList.remove('doc-ed-note-active');}); },1500);
+  }
+  function highlightCard(id){
+    var list=$('doc-notesList'), chk=$('doc-notesShowResolved'), card; if(!list) return;
+    card=list.querySelector('[data-note-id="'+id+'"]');
+    if(!card && chk && !chk.checked){ chk.checked=true; renderNotes(); card=list.querySelector('[data-note-id="'+id+'"]'); }
+    if(!card) return;
+    list.querySelectorAll('.doc-ed-note-card.active').forEach(function(c){c.classList.remove('active');});
+    card.classList.add('active'); card.classList.add('open'); card.scrollIntoView({block:'nearest'});
+  }
+  function noteCard(n){
+    var card=document.createElement('article'), orphan=n.anchored&&!noteHasAnchor(n.id), where;
+    card.className='doc-ed-note-card'+(n.resolved?' resolved':''); card.setAttribute('data-note-id',n.id);
+    where=n.anchored?(orphan?'<span class="doc-ed-note-badge">위치 없음</span> ':''):'<span class="doc-ed-note-badge">문서 전체</span>';
+    card.innerHTML='<div class="doc-ed-note-head"><strong>'+escapeHtml(n.author||'이름 없음')+'</strong><span>'+fmtTs(n.ts)+'</span>'+(n.resolved?'<span class="doc-ed-note-badge ok">해결됨</span>':'')+'</div>'
+      +'<div class="doc-ed-note-where">'+where+(n.quote?'<q>'+escapeHtml(n.quote)+'</q>':'')+'</div>'
+      +'<div class="doc-ed-note-text">'+escapeHtml(n.text)+'</div>'
+      +(n.replies.length?'<div class="doc-ed-note-replies">'+n.replies.map(function(r){ return '<div class="doc-ed-note-reply"><strong>'+escapeHtml(r.author||'이름 없음')+'</strong><span>'+fmtTs(r.ts)+'</span><div>'+escapeHtml(r.text)+'</div></div>'; }).join('')+'</div>':'')
+      +'<div class="doc-ed-note-actions"><button type="button" class="doc-ed-btn" data-act="reply">답글</button><button type="button" class="doc-ed-btn" data-act="resolve">'+(n.resolved?'다시 열기':'해결')+'</button><button type="button" class="doc-ed-btn ghost" data-act="remove">삭제</button></div>'
+      +'<div class="doc-ed-note-replybox" hidden><textarea rows="2" placeholder="답글"></textarea><button type="button" class="doc-ed-btn primary" data-act="send">남기기</button></div>';
+    return card;
+  }
+  function renderNotes(){
+    var open=openCount(), count=$('doc-notesCount'), btn=$('doc-notesBtn'), list=$('doc-notesList'), chk=$('doc-notesShowResolved'), showResolved=!!(chk&&chk.checked), shown=[], i;
+    if(count) count.textContent=open?String(open):''; if(btn) btn.title=open?('미해결 메모 '+open+'개'):'메모 보기·남기기';
+    showTarget();
+    if(!list) return; list.innerHTML='';
+    for(i=0;i<notes.length;i++) if(showResolved||!notes[i].resolved) shown.push(notes[i]);
+    if(!shown.length){ list.innerHTML='<p class="doc-ed-muted" style="font-size:13px;margin:6px 4px">'+(notes.length?'해결되지 않은 메모가 없습니다.':'메모가 없습니다. 본문을 선택하고 위에 남겨 보세요.')+'</p>'; return; }
+    for(i=0;i<shown.length;i++) list.appendChild(noteCard(shown[i]));
+  }
+  bind('doc-notesBtn','click',function(){ setNotes(!body.classList.contains('doc-notes-open')); });
+  bind('doc-notesClose','click',function(){ setNotes(false); var t=$('doc-notesBtn'); if(t) t.focus(); });
+  bind('doc-ebNote','click',function(){ setNotes(true); var input=$('doc-notesInput'); if(input && !input.disabled) input.focus(); });
+  bind('doc-notesInput','focus',captureTarget);
+  bind('doc-notesTargetClear','click',clearTarget);
+  bind('doc-notesAdd','click',function(){ var input=$('doc-notesInput'); if(!input) return; var n=addNote(input.value,noteTarget); if(n){ input.value=''; noteTarget=null; showTarget(); highlightCard(n.id); } });
+  bind('doc-notesShowResolved','change',renderNotes);
+  bind('doc-notesAuthor','change',function(){ storeAuthor(this.value.trim()); });
+  (function(){
+    var panel=$('doc-notes-panel'), list=$('doc-notesList'); if(!panel) return;
+    panel.addEventListener('mousedown',function(e){ if(e.target.closest('button')) e.preventDefault(); });
+    if(list) list.addEventListener('click',function(e){
+      var card=e.target.closest('.doc-ed-note-card'), act, id, a, box, ta, n, ok;
+      if(!card) return; id=card.getAttribute('data-note-id'); act=e.target.closest('[data-act]');
+      if(!act){ if(e.target.closest('textarea')) return; card.classList.toggle('open'); locateNote(id); return; }
+      a=act.getAttribute('data-act');
+      if(a==='reply'){ box=card.querySelector('.doc-ed-note-replybox'); box.hidden=!box.hidden; if(!box.hidden) box.querySelector('textarea').focus(); }
+      else if(a==='send'){ ta=card.querySelector('.doc-ed-note-replybox textarea'); if(replyNote(id,ta.value)) highlightCard(id); }
+      else if(a==='resolve'){ n=findNote(id); if(n) resolveNote(id,!n.resolved); }
+      else if(a==='remove'){ ok=true; try{ ok=window.confirm('이 메모와 답글을 삭제할까요?'); }catch(err){} if(ok) removeNote(id); }
+    });
+  })();
+  content.addEventListener('click',function(e){ var m=e.target.closest?e.target.closest('mark.doc-ed-note'):null; if(m && content.contains(m)){ setNotes(true); highlightCard(m.getAttribute('data-doc-note')); } });
 
   /* ---------- 편집 모드 ---------- */
   function setEdit(on){
@@ -1111,12 +1260,13 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     setInspector(false); setMore(this.getAttribute('aria-expanded')!=='true');
   });
   bind('doc-inspectorToggle','click',function(){
-    setMore(false);setInspector(this.getAttribute('aria-expanded')!=='true');
+    setMore(false);setNotes(false);setInspector(this.getAttribute('aria-expanded')!=='true');
   });
   bind('doc-inspectorClose','click',function(){setInspector(false);var t=$('doc-inspectorToggle');if(t)t.focus();});
   document.addEventListener('pointerdown',function(e){
     var controls=$('doc-controls');if(controls && !controls.contains(e.target))setMore(false);
     if(content.contains(e.target))setInspector(false);
+    if(content.contains(e.target) && window.matchMedia('(max-width:900px)').matches) setNotes(false);
   });
   var moreActions=$('doc-more-actions');if(moreActions)moreActions.addEventListener('click',function(e){if(e.target.closest('button'))setMore(false);});
 
@@ -1400,7 +1550,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   bind('doc-printBtn','click', function(){ if(editing) setEdit(false); window.print(); });
   var hm=$('doc-history-modal'); if(hm) hm.addEventListener('mousedown', function(e){ if(e.target===this) this.classList.remove('open'); });
   document.addEventListener('keydown', function(e){
-    if(e.key==='Escape'){setMore(false);setInspector(false);var m=$('doc-history-modal');if(m)m.classList.remove('open');}
+    if(e.key==='Escape'){setMore(false);setInspector(false);setNotes(false);var m=$('doc-history-modal');if(m)m.classList.remove('open');}
     if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==='s'||e.key==='S')){ e.preventDefault(); saveToFile(false); }
     if((e.metaKey||e.ctrlKey)&&(e.key==='e'||e.key==='E')){ e.preventDefault(); setEdit(!editing); }
   });
@@ -1413,7 +1563,8 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   /* ---------- 초기화 ---------- */
   try{ document.execCommand('styleWithCSS',false,true); }catch(e){}
   updateEditorLayout();
-  reconcileNotes(); renderNotes(); lastSavedHtml=content.innerHTML; lastBackedUpHtml=lastSavedHtml;
+  var authorInput=$('doc-notesAuthor'); if(authorInput) authorInput.value=currentAuthor();
+  reconcileNotes(); renderNotes(); lastSavedHtml=content.innerHTML; lastBackedUpHtml=lastSavedHtml; lastBackedUpNotes=JSON.stringify(notes);
   checkAutosave();
   (function(){ var by=body.dataset.docSavedBy||''; if(by && by!==currentAuthor() && history.length) toast(by+'이(가) 저장한 문서입니다. 변경 사항으로 수정된 부분을 볼 수 있습니다.',6000); })();
 

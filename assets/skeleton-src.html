@@ -30,6 +30,7 @@ body{ margin:0; font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans
 <div id="doc-controls">
   <button class="doc-ed-btn" id="doc-editToggle" title="편집 모드 (Cmd/Ctrl+E)">✎ 편집</button>
   <button class="doc-ed-btn primary" id="doc-saveBtn" title="최초 저장 시 대상 파일 선택 (Cmd/Ctrl+S)">저장</button>
+  <button class="doc-ed-btn" id="doc-notesBtn" aria-expanded="false" aria-controls="doc-notes-panel" title="메모 보기·남기기">메모<span class="doc-ed-count" id="doc-notesCount"></span></button>
   <button class="doc-ed-btn" id="doc-inspectorToggle" aria-expanded="false" aria-controls="doc-inspector">현재 서식</button>
   <button class="doc-ed-btn" id="doc-moreToggle" aria-expanded="false" aria-controls="doc-more-actions">더보기 ▾</button>
   <div id="doc-more-actions">
@@ -84,6 +85,9 @@ body{ margin:0; font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans
     <button class="doc-ed-eb" id="doc-ebTable" title="표 삽입">표</button>
     <button class="doc-ed-eb" data-cmd="removeFormat" title="서식 지우기">서식↺</button>
   </div>
+  <div class="doc-ed-g">
+    <button class="doc-ed-eb" id="doc-ebNote" title="선택한 부분에 메모 남기기">메모</button>
+  </div>
 </div>
 
 <aside id="doc-inspector">
@@ -101,6 +105,19 @@ body{ margin:0; font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans
       </span></span></div>
     </div>
     <div class="doc-ed-insp-hint">내용을 클릭하면 그 위치의 서식이 표시됩니다. 위 툴바로 바꿀 수 있어요.</div>
+  </div>
+</aside>
+<aside id="doc-notes-panel" aria-label="메모">
+  <div class="doc-ed-insp-card">
+    <div class="doc-ed-insp-h"><span class="d"></span>메모<button class="doc-ed-btn" id="doc-notesClose" aria-label="메모 닫기">닫기</button></div>
+    <div class="doc-ed-notes-author"><label for="doc-notesAuthor">이름</label><input id="doc-notesAuthor" type="text" placeholder="메모와 저장 기록에 표시" autocomplete="off"></div>
+    <div class="doc-ed-notes-compose">
+      <div id="doc-notesTarget"><span class="k">대상</span><span class="q">문서 전체</span><button type="button" id="doc-notesTargetClear" title="문서 전체 메모로 바꾸기" hidden>×</button></div>
+      <textarea id="doc-notesInput" rows="3" placeholder="본문을 선택한 뒤 여기에 쓰면 그 부분에 붙습니다. 선택이 없으면 문서 전체 메모입니다."></textarea>
+      <div class="doc-ed-notes-compose-actions"><label class="doc-ed-notes-filter"><input type="checkbox" id="doc-notesShowResolved"> 해결된 메모 보기</label><button type="button" class="doc-ed-btn primary" id="doc-notesAdd">남기기</button></div>
+      <div class="doc-ed-notes-hint" id="doc-notesHint" hidden>비교를 닫고 메모를 남겨 주세요.</div>
+    </div>
+    <div id="doc-notesList"></div>
   </div>
 </aside>
 
