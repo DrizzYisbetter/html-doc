@@ -118,7 +118,7 @@ test('wordDiff returns null when the token diff is too large', () => {
 
 - [ ] **Step 2: 실패 확인**
 
-Run: `node --test tests/unit/`
+Run: `node --test tests/unit/*.test.js`
 Expected: 모듈을 찾지 못해 실패 (`Cannot find module '../../assets/doc-diff.js'`).
 
 - [ ] **Step 3: `assets/doc-diff.js` 작성 (순수 함수 부분)**
@@ -225,7 +225,7 @@ Expected: 모듈을 찾지 못해 실패 (`Cannot find module '../../assets/doc-
 
 - [ ] **Step 4: 단위 테스트 통과 확인**
 
-Run: `node --test tests/unit/`
+Run: `node --test tests/unit/*.test.js`
 Expected: 13 tests pass, 0 fail.
 
 - [ ] **Step 5: 빌드 스크립트에 `doc-diff.js` 연결**
@@ -541,7 +541,7 @@ API 줄:
 
 - [ ] **Step 4: 재빌드 후 테스트 통과 확인**
 
-Run: `python3 assets/build-template.py && node --test tests/unit/ && aside repl "$(cat tests/review-notes.js)"`
+Run: `python3 assets/build-template.py && node --test tests/unit/*.test.js && aside repl "$(cat tests/review-notes.js)"`
 Expected: Node 13 pass. Aside 출력 마지막 줄 `{"pass":true,"count":8,...}`.
 
 - [ ] **Step 5: 커밋**
@@ -1877,7 +1877,7 @@ Expected: `all nine UI blocks are attached` 실패(변환기가 두 블록을 �
 
 Run:
 ```
-python3 assets/build-template.py && python3 assets/build-template.py --check && python3 scripts/check-release.py && node --test tests/unit/
+python3 assets/build-template.py && python3 assets/build-template.py --check && python3 scripts/check-release.py && node --test tests/unit/*.test.js
 ```
 Expected: 모두 통과, `Package validation passed.`
 
@@ -1928,7 +1928,7 @@ git commit -m "변환기·패키지 검사에 메모·변경 사항 크롬 반�
 
 - 첫 문단의 기능 나열 끝에 `, 메모(선택 영역·답글·해결), 변경 사항 비교(저장본·파일 기준, 되돌리기)`를 추가한다.
 - "편집 계약" 2항을 `#doc-controls·#doc-editbar·#doc-changes-bar·#doc-inspector·#doc-notes-panel·#doc-editflag·#doc-restore-banner·#doc-history-modal·#doc-toast` 9블록으로, 3항을 `#doc-history`와 `#doc-notes` 두 저장소로, 4항의 인라인 순서를 `doc-attach.js + doc-diff.js + doc-editor.js`로 바꾼다. "수동 통합 시 ... 크롬 7블록"도 9블록으로 바꾼다.
-- "스킬 자체를 유지보수한다면" 문단에 `비교 엔진은 assets/doc-diff.js에서 수정한다. 순수 함수는 node --test tests/unit/ 으로 검사한다.`를 추가한다.
+- "스킬 자체를 유지보수한다면" 문단에 `비교 엔진은 assets/doc-diff.js에서 수정한다. 순수 함수는 node --test tests/unit/*.test.js 로 검사한다.`를 추가한다.
 - "배포용 HTML 저장" 절에 `- 메모 저장소·본문 mark·메모 패널·변경 사항 바·저장 출처 속성(data-doc-saved-by/at)을 제거한다.`를 추가한다.
 - "모바일 편집 UI" 절에 `- 메모 버튼은 컨트롤 첫 줄에 있고 편집 중에는 숨긴다(툴바의 메모 버튼 사용). 변경 사항은 더보기 안에 있다. 메모 패널은 현재 서식 패널과 같은 자리를 쓰며 둘 중 하나만 열린다.`를 추가한다.
 - "디자인 중립 / 테마" 절 끝에 `- 메모 하이라이트와 비교 표식은 문서 팔레트와 무관한 고정 색(노랑·초록·빨강·파랑·보라)을 쓰고 글자색은 문서 것을 따른다.`를 추가한다.
@@ -2000,7 +2000,7 @@ git commit -m "변환기·패키지 검사에 메모·변경 사항 크롬 반�
 `review-notes.js` covers the diff engine, author prompt, provenance, backup safety, notes (API and panel), comparison mode (API and bar), and narrow layouts. Stub `window.prompt` in any new browser test that saves or adds notes. Pure diff functions also have Node tests:
 
 ```sh
-node --test tests/unit/
+node --test tests/unit/*.test.js
 ```
 ```
 
