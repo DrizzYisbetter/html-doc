@@ -614,10 +614,11 @@ check('author: prompt once on first save and remembered', await page.evaluate(as
   await window.DocEditor.save(); await window.DocEditor.save();
   return window.__prompts===1 && localStorage.getItem('docedit:author')==='검토자' && window.DocEditor.author()==='검토자';
 }));
-check('provenance: saved-by/at and history author are written', await page.evaluate(()=>{
+check('provenance: saved-by/at and history author are written, export strips them', await page.evaluate(()=>{
   const docs=window.__writes.map(h=>new DOMParser().parseFromString(h,'text/html'));
   const b=docs[1].body, hist=JSON.parse(docs[1].getElementById('doc-history').textContent);
-  return docs.length===2 && b.dataset.docSavedBy==='검토자' && /^\d{4}-/.test(b.dataset.docSavedAt||'') && hist.length===1 && hist[0].author==='' && !!b.dataset.docId;
+  const ro=new DOMParser().parseFromString(window.DocEditor.getReadOnlyHTML(),'text/html').body;
+  return docs.length===2 && b.dataset.docSavedBy==='검토자' && /^\d{4}-/.test(b.dataset.docSavedAt||'') && hist.length===1 && hist[0].author==='' && !!b.dataset.docId && !ro.hasAttribute('data-doc-saved-by') && !ro.hasAttribute('data-doc-saved-at');
 }));
 check('backup: first save assigns id and drops the path-keyed backup', await page.evaluate(()=>{
   const pathKey='docedit:autosave:url:'+location.origin+location.pathname, idKey='docedit:autosave:'+document.body.dataset.docId;
@@ -724,7 +725,6 @@ Expected: `FAIL: author: prompt once on first save and remembered`.
     }
     try{
       if(editing) setEdit(false);
-      var author=ensureAuthor();
       await fileLinkReady;
       var handle=forceNew?null:fileHandle, pickerFailed=false;
       if(window.showSaveFilePicker){
@@ -733,6 +733,8 @@ Expected: `FAIL: author: prompt once on first save and remembered`.
           else { var p=await handle.queryPermission({mode:'readwrite'}); if(p!=='granted' && (await handle.requestPermission({mode:'readwrite'}))!=='granted'){ toast('쓰기 권한이 허용되지 않아 저장하지 않았습니다. 다시 저장하거나 다른 이름으로 저장해 주세요.'); return; } }
         }catch(e){ if(e&&e.name==='AbortError') return; if(handle){ toast('저장 파일의 쓰기 권한을 확인하지 못했습니다. 저장 버튼을 다시 눌러 주세요.'); return; } handle=null; pickerFailed=true; }
       }
+      // 이름은 파일 선택기가 끝난 뒤에 묻는다(선택기 앞의 prompt는 사용자 동작 유효 시간을 소모한다). 선택기를 취소하면 묻지 않는다.
+      var author=ensureAuthor();
       // 첫 저장에서 문서 ID를 만들어 백업을 경로가 아닌 문서별로 구분한다. 다른 이름으로 저장하면 새 ID.
       if(forceNew || !body.dataset.docId){ body.dataset.docId=genId(); changedId=true; }
       var savedHtml=getContentHtml();
@@ -759,7 +761,7 @@ Expected: `FAIL: author: prompt once on first save and remembered`.
       if(wroteFile && rememberAtThisLocation) remembered=(await fileLinkStore('put',handle)).ok;
       updateSaveHint();
       lastSavedHtml=savedHtml;
-      // 일반 저장에서 경로 키가 ID 키로 바뀌었으면 새 키 백업에 성공한 뒤 경로 키 백업을 지운다. 다른 이름으로는 원래 경로 백업을 두지 않는다.
+      // 일반 저장에서 경로 키가 ID 키로 바뀌었으면 새 키 백업에 성공한 뒤 경로 키 백업을 지운다. 다른 이름으로 저장할 때는 원래 경로의 백업을 건드리지 않는다.
       if(writeBackup() && wasPathKeyed && !forceNew){ try{ localStorage.removeItem('docedit:autosave:url:'+location.origin+location.pathname); }catch(e){} }
       var banner=$('doc-restore-banner'); if(banner) banner.classList.remove('show');
       toast(wroteFile?'저장되었습니다 · '+handle.name+(remembered?'':' · 파일 연결을 기억하지 못해 다음에 다시 선택해야 합니다.'):(pickerFailed?'파일 저장 실패. 다운로드를 시작했습니다.':'다운로드를 시작했습니다. 내려받은 파일을 확인해 주세요.'));
@@ -834,6 +836,8 @@ Expected: `FAIL: author: prompt once on first save and remembered`.
 ```js
     author:function(name){ if(typeof name==='string'){ storeAuthor(name.trim()); } return currentAuthor(); },
 ```
+
+(n) `serializeReadOnly()`에서 `b.removeAttribute('data-doc-id');` 뒤에 `b.removeAttribute('data-doc-saved-by');b.removeAttribute('data-doc-saved-at');`를 추가한다(배포본에 저장자 이름을 남기지 않는다).
 
 - [ ] **Step 5: 재빌드 후 테스트**
 
@@ -1025,7 +1029,7 @@ Expected: `FAIL: notes: anchored note wraps the selection ...` (`window.DocEdito
     var rv=clone.querySelector('#doc-changesRevert'); if(rv) rv.disabled=true;
 ```
 
-(e) `serializeReadOnly()`에서 제거 셀렉터 배열 `['#doc-controls','#doc-editbar','#doc-inspector','#doc-editflag','#doc-restore-banner', '#doc-history-modal','#doc-toast','#doc-history',...]`에 `'#doc-notes-panel','#doc-changes-bar','#doc-notes'`를 추가하고, `b.removeAttribute('data-doc-id');` 뒤에 `b.removeAttribute('data-doc-saved-by');b.removeAttribute('data-doc-saved-at');`를 추가하고, `var c=clone.querySelector('#doc-content');if(c)c.removeAttribute('contenteditable');` 줄을 아래로 바꾼다:
+(e) `serializeReadOnly()`에서 제거 셀렉터 배열 `['#doc-controls','#doc-editbar','#doc-inspector','#doc-editflag','#doc-restore-banner', '#doc-history-modal','#doc-toast','#doc-history',...]`에 `'#doc-notes-panel','#doc-changes-bar','#doc-notes'`를 추가하고(출처 속성 제거 `b.removeAttribute('data-doc-saved-by');...`는 Task 3에서 이미 들어 있다), `var c=clone.querySelector('#doc-content');if(c)c.removeAttribute('contenteditable');` 줄을 아래로 바꾼다:
 
 ```js
     var c=clone.querySelector('#doc-content');
