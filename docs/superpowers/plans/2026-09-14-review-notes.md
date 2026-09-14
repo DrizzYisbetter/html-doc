@@ -887,7 +887,15 @@ check('notes: multi-paragraph selection creates marks with one id', await page.e
   const marks=document.querySelectorAll('mark.doc-ed-note[data-doc-note="'+id+'"]');
   return marks.length===2 && marks[0].closest('p')===p1 && marks[1].closest('p')===p2 && marks[0].textContent==='문장입니다.' && marks[1].textContent==='셋째';
 }));
-check('notes: whole-document note has no anchor', await page.evaluate(()=>{ const id=window.DocEditor.notes.add('전체 의견'); const n=window.DocEditor.notes.list().find(x=>x.id===id); return !!n && !n.anchored && n.quote==='' && document.querySelectorAll('mark.doc-ed-note').length===3; }));
+check('notes: element-boundary range wraps the text and the inline element', await page.evaluate(()=>{
+  const c=document.getElementById('doc-content'); c.insertAdjacentHTML('beforeend','<p id="qa-p3">가나다<b>라</b>마바사</p>');
+  const p=document.getElementById('qa-p3'), r=document.createRange(); r.setStart(p.firstChild,1); r.setEnd(p,2);
+  const id=window.DocEditor.notes.add('경계 메모',{range:r});
+  const marks=[...document.querySelectorAll('mark[data-doc-note="'+id+'"]')].map(m=>m.textContent);
+  const n=window.DocEditor.notes.list().find(x=>x.id===id);
+  return marks.join('|')==='나다|라' && !!p.querySelector('b > mark') && p.textContent==='가나다라마바사' && n.quote==='나다라' && n.anchored && [...p.childNodes].every(x=>x.nodeType!==3||x.nodeValue!=='');
+}));
+check('notes: whole-document note has no anchor', await page.evaluate(()=>{ const id=window.DocEditor.notes.add('전체 의견'); const n=window.DocEditor.notes.list().find(x=>x.id===id); return !!n && !n.anchored && n.quote==='' && document.querySelectorAll('mark.doc-ed-note').length===5; }));
 check('notes: reply, resolve, reopen', await page.evaluate(()=>{
   const id=window.DocEditor.notes.list()[0].id;
   const ok1=window.DocEditor.notes.reply(id,'반영했습니다'), ok2=window.DocEditor.notes.resolve(id,true);
@@ -899,11 +907,11 @@ check('notes: reply, resolve, reopen', await page.evaluate(()=>{
 check('notes: saved file carries store and marks, export strips both', await page.evaluate(()=>{
   const d=new DOMParser().parseFromString(window.DocEditor.getHTML(),'text/html'), store=JSON.parse(d.getElementById('doc-notes').textContent);
   const ro=new DOMParser().parseFromString(window.DocEditor.getReadOnlyHTML(),'text/html');
-  return store.length===3 && d.querySelectorAll('#doc-content mark.doc-ed-note').length===3 && !ro.getElementById('doc-notes') && !ro.querySelector('mark.doc-ed-note') && ro.getElementById('doc-content').textContent.includes('첫째 문장입니다. 둘째 문장입니다.') && !ro.body.hasAttribute('data-doc-saved-by');
+  return store.length===4 && d.querySelectorAll('#doc-content mark.doc-ed-note').length===5 && !ro.getElementById('doc-notes') && !ro.querySelector('mark.doc-ed-note') && ro.getElementById('doc-content').textContent.includes('첫째 문장입니다. 둘째 문장입니다.') && !ro.body.hasAttribute('data-doc-saved-by');
 }));
 check('notes: remove unwraps marks and merges text', await page.evaluate(()=>{
   const id=window.DocEditor.notes.list()[0].id, ok=window.DocEditor.notes.remove(id), p1=document.getElementById('qa-p1');
-  return ok && document.querySelectorAll('mark[data-doc-note="'+id+'"]').length===0 && window.DocEditor.notes.list().length===2 && p1.childNodes.length===2 && p1.childNodes[0].nodeValue==='첫째 문장입니다. 둘째 ';
+  return ok && document.querySelectorAll('mark[data-doc-note="'+id+'"]').length===0 && window.DocEditor.notes.list().length===3 && p1.childNodes.length===2 && p1.childNodes[0].nodeValue==='첫째 문장입니다. 둘째 ';
 }));
 check('notes: marks without a stored note are unwrapped', await page.evaluate(()=>{
   const c=document.getElementById('doc-content');
@@ -916,10 +924,10 @@ check('notes: marks without a stored note are unwrapped', await page.evaluate(()
 check('notes: browser backup includes notes', await page.evaluate(async()=>{
   await new Promise(r=>setTimeout(r,900));
   const a=JSON.parse(localStorage.getItem('docedit:autosave:url:'+location.origin+location.pathname));
-  return !!a && Array.isArray(a.notes) && a.notes.length===2 && a.notes[0].text==='두 문단에 걸친 메모';
+  return !!a && Array.isArray(a.notes) && a.notes.length===3 && a.notes[0].text==='두 문단에 걸친 메모';
 }));
 await page.reload(); await stub();
-check('notes: recovery restores notes with the body', await page.evaluate(()=>{ const b=document.getElementById('doc-restore-banner'); if(!b.classList.contains('show')) return false; document.getElementById('doc-rb-restore').click(); return window.DocEditor.notes.list().length===2 && document.getElementById('doc-content').textContent.includes('고아 표시'); }));
+check('notes: recovery restores notes with the body', await page.evaluate(()=>{ const b=document.getElementById('doc-restore-banner'); if(!b.classList.contains('show')) return false; document.getElementById('doc-rb-restore').click(); return window.DocEditor.notes.list().length===3 && document.getElementById('doc-content').textContent.includes('고아 표시'); }));
 await page.evaluate(()=>localStorage.removeItem('docedit:autosave:url:'+location.origin+location.pathname));
 ```
 
@@ -950,7 +958,8 @@ Expected: `FAIL: notes: anchored note wraps the selection ...` (`window.DocEdito
 ```js
   function sanitizeNotes(arr){
     if(!Array.isArray(arr)) return [];
-    return arr.filter(function(v){ return v && typeof v.id==='string' && typeof v.text==='string'; }).map(function(v){
+    var seen={};
+    return arr.filter(function(v){ if(!(v && typeof v.id==='string' && /^[A-Za-z0-9_-]+$/.test(v.id) && typeof v.text==='string') || seen[v.id]) return false; seen[v.id]=true; return true; }).map(function(v){
       return {id:v.id, author:typeof v.author==='string'?v.author:'', ts:typeof v.ts==='string'?v.ts:'', text:v.text, quote:typeof v.quote==='string'?v.quote:'', anchored:!!v.anchored, resolved:!!v.resolved,
         replies:Array.isArray(v.replies)?v.replies.filter(function(r){ return r && typeof r.text==='string'; }).map(function(r){ return {author:typeof r.author==='string'?r.author:'', ts:typeof r.ts==='string'?r.ts:'', text:r.text}; }):[]};
     });
@@ -970,12 +979,14 @@ Expected: `FAIL: notes: anchored note wraps the selection ...` (`window.DocEdito
   function unwrapMark(m){ var p=m.parentNode; while(m.firstChild) p.insertBefore(m.firstChild,m); p.removeChild(m); p.normalize(); }
   function unwrapMarks(id,root){ var marks=noteMarks(id,root); for(var i=0;i<marks.length;i++) unwrapMark(marks[i]); }
   // 선택 범위 안의 텍스트 노드를 같은 ID의 mark로 감싼다. 경계 텍스트는 잘라 선택한 부분만 감싼다.
+  // range는 live Range여야 한다. splitText 뒤 경계는 브라우저가 따라 움직이므로 자른 뒤에 다시 읽는다.
   function wrapRange(range,id){
-    var sc=range.startContainer, so=range.startOffset, ec=range.endContainer, eo=range.endOffset, r=document.createRange(), walker, nodes=[], t, i, m, rest;
-    if(ec.nodeType===3 && eo<ec.nodeValue.length) ec.splitText(eo);
-    if(sc.nodeType===3 && so>0){ rest=sc.splitText(so); if(ec===sc) ec=rest; sc=rest; so=0; }
-    if(sc.nodeType===3) r.setStart(sc,0); else r.setStart(sc,so);
-    if(ec.nodeType===3) r.setEnd(ec,ec.nodeValue.length); else r.setEnd(ec,eo);
+    var sc=range.startContainer, so=range.startOffset, ec=range.endContainer, eo=range.endOffset, r, walker, nodes=[], t, i, m;
+    if(ec.nodeType===3 && eo>0 && eo<ec.nodeValue.length) ec.splitText(eo);
+    if(sc.nodeType===3 && so>0 && so<sc.nodeValue.length) sc.splitText(so);
+    r=range.cloneRange();
+    if(r.startContainer.nodeType===3 && r.startOffset>=r.startContainer.nodeValue.length) r.setStartAfter(r.startContainer);
+    if(r.endContainer.nodeType===3 && r.endOffset===0) r.setEndBefore(r.endContainer);
     walker=document.createTreeWalker(content,NodeFilter.SHOW_TEXT,null);
     while((t=walker.nextNode())) if(r.intersectsNode(t)) nodes.push(t);
     while(nodes.length && !normText(nodes[0].nodeValue)) nodes.shift();
@@ -1046,12 +1057,12 @@ Expected: `FAIL: notes: anchored note wraps the selection ...` (`window.DocEdito
     },
 ```
 
-(g) 초기화 블록의 `checkAutosave();` 앞에 `reconcileNotes(); renderNotes();`를 추가한다.
+(g) 초기화 블록의 `checkAutosave();` 앞에 `reconcileNotes(); renderNotes(); lastSavedHtml=content.innerHTML; lastBackedUpHtml=lastSavedHtml;`를 추가한다(열 때 고아 mark를 풀어 본문이 바뀌어도 저장 기준·백업 기준은 그 결과를 따른다).
 
 - [ ] **Step 5: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && node --check assets/doc-editor.js && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":28`.
+Expected: `"pass":true,"count":29`.
 
 - [ ] **Step 6: 커밋**
 
@@ -1344,7 +1355,7 @@ body.doc-notes-open #doc-inspector{ display:none; }
 - [ ] **Step 6: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":35`.
+Expected: `"pass":true,"count":36`.
 
 - [ ] **Step 7: 커밋**
 
@@ -1612,7 +1623,7 @@ Expected: `FAIL: compare: session baseline ...` (`window.DocEditor.compare is no
 - [ ] **Step 4: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && node --check assets/doc-editor.js && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":42`.
+Expected: `"pass":true,"count":43`.
 
 - [ ] **Step 5: 커밋**
 
@@ -1806,7 +1817,7 @@ body.doc-changes #doc-content [data-doc-change]{ cursor:pointer; }
 - [ ] **Step 5: 재빌드 후 테스트**
 
 Run: `python3 assets/build-template.py && aside repl "$(cat tests/review-notes.js)"`
-Expected: `"pass":true,"count":47`.
+Expected: `"pass":true,"count":48`.
 
 - [ ] **Step 6: 커밋**
 
