@@ -350,4 +350,91 @@ check('compare: Escape and history restore close the comparison', await page.eva
 }));
 await page.evaluate(()=>{ window.DocEditor.notes.list().forEach(n=>window.DocEditor.notes.remove(n.id)); Object.keys(localStorage).filter(k=>k.startsWith('docedit:autosave:')).forEach(k=>localStorage.removeItem(k)); });
 
+// ---- D2. 비교 바 UI ----
+await fresh();
+check('compare ui: bar summary, baseline select, navigation, revert, close', await page.evaluate(async()=>{
+  let src=await (await fetch('/assets/skeleton.html',{cache:'no-store'})).text();
+  const base='<p>하나 둘 셋</p><p>지울 문단</p><p style="text-align:left">정렬</p>';
+  src=src.replace('id="doc-history">[]','id="doc-history">[{"ts":"2026-09-11T00:00:00.000Z","title":"기준","html":"'+base.replace(/"/g,'\\"').replace(/</g,'\\u003c')+'","author":"작성자"}]');
+  const f=document.createElement('iframe'); f.style.cssText='width:1280px;height:900px'; f.srcdoc=src; document.body.appendChild(f); await new Promise(r=>f.onload=r);
+  const w=f.contentWindow, d=w.document, c=d.getElementById('doc-content'); c.innerHTML='<p>하나 넷 셋</p><p style="text-align:center">정렬</p><p>새 문단</p>';
+  const shown=id=>w.getComputedStyle(d.getElementById(id)).display!=='none';
+  d.getElementById('doc-changesBtn').click();
+  const barShown=shown('doc-changes-bar') && d.body.classList.contains('doc-changes') && d.getElementById('doc-changesBtn').classList.contains('on');
+  const sel=d.getElementById('doc-changesBase'), opts=[...sel.options].map(o=>o.value).join(',');
+  sel.value='history:0'; sel.dispatchEvent(new w.Event('change'));
+  const summary=d.getElementById('doc-changesSummary').textContent;
+  d.getElementById('doc-changesNext').click(); const first=d.querySelector('#doc-content .doc-ed-diff-active');
+  const revertEnabled=!d.getElementById('doc-changesRevert').disabled;
+  d.getElementById('doc-changesRevert').click(); const after=d.getElementById('doc-changesSummary').textContent;
+  const nextActive=d.querySelector('#doc-content .doc-ed-diff-active');
+  d.getElementById('doc-changesClose').click();
+  const closed=!shown('doc-changes-bar') && !d.body.classList.contains('doc-changes') && c.innerHTML==='<p>하나 둘 셋</p><p style="text-align:center">정렬</p><p>새 문단</p>' && d.body.style.paddingTop==='';
+  f.remove();
+  return barShown && opts==='session,history:0,pick' && summary==='추가 1 · 삭제 1 · 수정 1 · 서식 1' && !!first && first.classList.contains('doc-ed-diff-mod') && revertEnabled && after==='추가 1 · 삭제 1 · 수정 0 · 서식 1' && !!nextActive && nextActive.classList.contains('doc-ed-diff-del') && closed;
+}));
+check('compare ui: file baseline through the hidden input', await page.evaluate(async()=>{
+  const c=document.getElementById('doc-content'); c.innerHTML='<p>현재 본문</p>';
+  window.DocEditor.compare(true);
+  const input=document.getElementById('doc-changesFile'), dt=new DataTransfer();
+  dt.items.add(new File(['<!DOCTYPE html><html><body><main id="doc-content"><p>파일 본문</p></main></body></html>'],'기준.html',{type:'text/html'}));
+  input.files=dt.files; input.dispatchEvent(new Event('change'));
+  await new Promise(r=>setTimeout(r,300));
+  const s=window.DocEditor.changes(), sel=document.getElementById('doc-changesBase');
+  const ok=s.baseline==='파일: 기준.html' && s.counts.mod===1 && sel.value==='file' && /다른 파일 선택/.test(sel.options[sel.options.length-1].textContent);
+  window.DocEditor.compare(false); return ok;
+}));
+check('compare ui: clicking a change selects it and Escape closes', await page.evaluate(()=>{
+  const c=document.getElementById('doc-content'); c.innerHTML='<p>하나</p><p>둘</p><p>셋</p>';
+  window.DocEditor.compareWith('session');
+  const el=c.querySelector('[data-doc-change]'); el.click();
+  const selected=el.classList.contains('doc-ed-diff-active') && window.DocEditor.changes().index===0;
+  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  return selected && !window.DocEditor.isComparing() && c.innerHTML==='<p>하나</p><p>둘</p><p>셋</p>';
+}));
+// ---- E. 반응형 ----
+check('responsive: notes panel and changes bar fit narrow screens', await page.evaluate(async()=>{
+  const source=await (await fetch('/examples/demo.html',{cache:'no-store'})).text(), out=[];
+  for(const [width,height] of [[320,640],[390,844],[768,1024]]){
+    const f=document.createElement('iframe'); f.style.cssText=`position:fixed;left:0;top:0;width:${width}px;height:${height}px;z-index:2147483647;background:#fff;border:0`;
+    const loaded=new Promise(r=>f.onload=r); f.srcdoc=source.replace('<body>','<body data-doc-id="qa-review-'+width+'">'); document.body.appendChild(f); await loaded;
+    const w=f.contentWindow, d=w.document, settle=()=>new Promise(r=>w.requestAnimationFrame(()=>w.requestAnimationFrame(r)));
+    const rect=id=>d.getElementById(id).getBoundingClientRect(), shown=id=>w.getComputedStyle(d.getElementById(id)).display!=='none';
+    await settle();
+    const controls=rect('doc-controls');
+    const rowOk=controls.height<70 && rect('doc-notesBtn').right<=width && rect('doc-notesBtn').height>=44;
+    d.getElementById('doc-notesBtn').click(); await settle();
+    const panel=rect('doc-notes-panel');
+    const panelOk=shown('doc-notes-panel') && panel.left>=0 && panel.right<=width+1 && panel.top>=controls.bottom-1 && panel.bottom<=height+1;
+    d.getElementById('doc-notesClose').click();
+    d.getElementById('doc-editToggle').click(); await settle();
+    const editOk=!shown('doc-notesBtn') && rect('doc-controls').height<70 && d.documentElement.scrollWidth<=width+1;
+    d.getElementById('doc-ebNote').click(); await settle();
+    const editPanelOk=shown('doc-notes-panel') && rect('doc-notes-panel').top>=rect('doc-editbar').bottom-1;
+    d.getElementById('doc-notesClose').click(); d.getElementById('doc-editToggle').click(); await settle();
+    d.getElementById('doc-moreToggle').click(); d.getElementById('doc-changesBtn').click(); await settle();
+    const bar=rect('doc-changes-bar');
+    const barOk=shown('doc-changes-bar') && bar.top>=controls.bottom-1 && bar.width<=width+1 && parseFloat(d.body.style.paddingTop)>=bar.bottom-1 && d.documentElement.scrollWidth<=width+1;
+    d.getElementById('doc-changesClose').click(); await settle();
+    out.push({width,rowOk,panelOk,editOk,editPanelOk,barOk});
+    w.localStorage.removeItem('docedit:autosave:qa-review-'+width); f.remove();
+  }
+  console.log(JSON.stringify(out));
+  return out.every(o=>o.rowOk&&o.panelOk&&o.editOk&&o.editPanelOk&&o.barOk);
+}));
+check('responsive: desktop panel sits below the controls and the bar avoids them', await page.evaluate(async()=>{
+  const source=await (await fetch('/examples/demo.html',{cache:'no-store'})).text();
+  const f=document.createElement('iframe'); f.style.cssText='position:fixed;left:0;top:0;width:1280px;height:900px;z-index:2147483647;background:#fff;border:0';
+  const loaded=new Promise(r=>f.onload=r); f.srcdoc=source.replace('<body>','<body data-doc-id="qa-review-desktop">'); document.body.appendChild(f); await loaded;
+  const w=f.contentWindow, d=w.document, settle=()=>new Promise(r=>w.requestAnimationFrame(()=>w.requestAnimationFrame(r)));
+  const rect=id=>d.getElementById(id).getBoundingClientRect();
+  await settle(); d.getElementById('doc-notesBtn').click(); await settle();
+  const panelOk=rect('doc-notes-panel').top>=rect('doc-controls').bottom && rect('doc-notes-panel').right<=1280;
+  d.getElementById('doc-notesClose').click(); d.getElementById('doc-changesBtn').click(); await settle();
+  const bar=d.getElementById('doc-changes-bar'), items=[...bar.children].map(el=>el.getBoundingClientRect());
+  const barOk=w.getComputedStyle(bar).display!=='none' && items.every(r=>r.width===0 || r.right<=rect('doc-controls').left || r.top>=rect('doc-controls').bottom);
+  d.getElementById('doc-changesClose').click(); w.localStorage.removeItem('docedit:autosave:qa-review-desktop'); f.remove();
+  return panelOk && barOk;
+}));
+
 console.log(JSON.stringify({pass:true,count:results.length,results}));

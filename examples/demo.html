@@ -265,6 +265,36 @@ body.doc-notes-open #doc-inspector{ display:none; }
 #doc-content mark.doc-ed-note.doc-ed-note-resolved{ background:none; border-bottom:1px dotted #d97706; }
 #doc-content mark.doc-ed-note.doc-ed-note-active{ background:rgba(245,158,11,.55); outline:2px solid #f59e0b; outline-offset:1px; }
 
+/* ---------- 변경 사항 바 (비교 모드에서만 · 편집 툴바 자리) ---------- */
+#doc-changes-bar{
+  position:fixed; top:0; left:0; right:0; z-index:2147483000;
+  display:none; align-items:center; gap:8px; flex-wrap:wrap;
+  background:var(--doc-ed-ink,#1f2937); color:#fff; padding:7px 14px;
+  padding-right:calc(var(--doc-ed-controls-width,380px) + 28px);
+  box-shadow:0 4px 14px rgba(16,24,40,.22);
+  font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
+}
+body.doc-changes #doc-changes-bar{ display:flex; }
+#doc-changes-bar .doc-ed-g{ display:flex; align-items:center; gap:4px; }
+#doc-changes-bar .doc-ed-cb-label{ font-size:11px; font-weight:700; color:#aeb6bf; }
+#doc-changes-bar .doc-ed-esel{ max-width:320px; }
+#doc-changes-bar .doc-ed-cb-summary{ font-size:12.5px; font-weight:700; }
+#doc-changes-bar .doc-ed-eb:disabled{ opacity:.45; cursor:default; }
+#doc-changesFile{ display:none!important; }
+body.doc-changes #doc-content{ cursor:default; }
+body.doc-changes #doc-content [data-doc-change]{ cursor:pointer; }
+/* diff 표식: 문서 팔레트와 무관한 고정 시맨틱 색. 글자색은 문서 것 */
+#doc-content .doc-ed-diff-ins{ background:rgba(34,197,94,.12); box-shadow:-4px 0 0 #22c55e; }
+#doc-content .doc-ed-diff-del{ background:rgba(239,68,68,.10); box-shadow:-4px 0 0 #ef4444; text-decoration:line-through; text-decoration-color:rgba(239,68,68,.7); }
+#doc-content .doc-ed-diff-mod{ box-shadow:-4px 0 0 #3b82f6; }
+#doc-content .doc-ed-diff-fmt{ outline:1px dashed #8b5cf6; outline-offset:2px; }
+#doc-content .doc-ed-diff-fmt::before{ content:'서식 변경'; display:inline-block; font-size:10px; line-height:1.4; font-weight:700; padding:0 5px; margin-right:6px; border-radius:4px; background:#ede9fe; color:#5b21b6; vertical-align:middle; letter-spacing:0; text-decoration:none; }
+#doc-content ins.doc-ed-ins{ background:rgba(34,197,94,.25); text-decoration:underline; text-decoration-color:#16a34a; color:inherit; }
+#doc-content del.doc-ed-del{ background:rgba(239,68,68,.18); text-decoration:line-through; color:inherit; }
+#doc-content .doc-ed-diff-run{ display:inline; }
+#doc-content .doc-ed-diff-del-wrap{ padding:4px 8px; }
+#doc-content .doc-ed-diff-active{ outline:2px solid #2563eb; outline-offset:3px; }
+
 /* ---------- 편집 affordance (문서 클래스 비의존 범용 셀렉터) ---------- */
 body.doc-editing #doc-content{ outline:none; }
 body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th,dd,dt,blockquote,figcaption):hover{
@@ -369,6 +399,11 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   #doc-editbar .doc-ed-ecol{ height:44px; }
   #doc-editbar .doc-ed-ecol input[type=color]{ width:36px; height:36px; }
   #doc-editbar .doc-ed-ecol .mini{ min-height:36px; padding:0 10px; }
+  #doc-changes-bar{ top:var(--doc-ed-controls-height,60px); padding:6px 8px; flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; gap:6px; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; scrollbar-width:thin; }
+  #doc-changes-bar > *{ flex:0 0 auto; }
+  #doc-changes-bar .doc-ed-esel{ height:44px; font-size:16px; max-width:200px; }
+  #doc-changes-bar .doc-ed-eb{ height:44px; min-width:44px; }
+  #doc-changes-bar .doc-ed-cb-summary{ white-space:nowrap; }
   body.doc-editing #doc-inspector{ display:none; }
   body.doc-editing.doc-inspector-open #doc-inspector{ display:block; }
   #doc-inspector{ left:8px; right:8px; width:auto; }
@@ -413,6 +448,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   <button class="doc-ed-btn" id="doc-inspectorToggle" aria-expanded="false" aria-controls="doc-inspector">현재 서식</button>
   <button class="doc-ed-btn" id="doc-moreToggle" aria-expanded="false" aria-controls="doc-more-actions">더보기 ▾</button>
   <div id="doc-more-actions">
+  <button class="doc-ed-btn ghost" id="doc-changesBtn" title="저장본이나 파일과 비교해 바뀐 부분 표시">변경 사항</button>
   <button class="doc-ed-btn ghost" id="doc-saveAsBtn" title="새 파일로 저장">다른 이름으로</button>
   <button class="doc-ed-btn ghost" id="doc-exportBtn" title="편집기와 히스토리를 뺀 별도 HTML 내려받기">배포용 HTML 저장</button>
   <button class="doc-ed-btn ghost" id="doc-attachBtn" title="다른 HTML 파일을 선택해 편집 가능한 사본으로 다운로드">HTML에 편집기 추가</button>
@@ -467,6 +503,19 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   <div class="doc-ed-g">
     <button class="doc-ed-eb" id="doc-ebNote" title="선택한 부분에 메모 남기기">메모</button>
   </div>
+</div>
+
+<div id="doc-changes-bar" role="region" aria-label="변경 사항 비교">
+  <span class="doc-ed-cb-label">비교 기준</span>
+  <select class="doc-ed-esel" id="doc-changesBase" title="비교 기준"></select>
+  <input id="doc-changesFile" type="file" accept=".html,.htm,text/html" hidden>
+  <span id="doc-changesSummary" class="doc-ed-cb-summary"></span>
+  <div class="doc-ed-g">
+    <button class="doc-ed-eb" id="doc-changesPrev" title="이전 변경">◂ 이전</button>
+    <button class="doc-ed-eb" id="doc-changesNext" title="다음 변경">다음 ▸</button>
+    <button class="doc-ed-eb" id="doc-changesRevert" title="선택한 변경을 기준 버전으로 되돌리기" disabled>원래대로</button>
+  </div>
+  <button class="doc-ed-eb" id="doc-changesClose" title="비교 닫기">닫기</button>
 </div>
 
 <aside id="doc-inspector">
