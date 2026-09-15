@@ -516,6 +516,56 @@ check('block: 비교 모드에서는 블록 삭제가 거부된다', await page.
   window.DocEditor.compare(false);
   return apiRefused && bodyUnchanged && stillComparing;
 }));
+await setup();
+check('block: 토스트의 되돌리기 버튼이 실제로 눌리는 위치에 있다', await page.evaluate(()=>{
+  window.__put('f-p'); document.getElementById('doc-ebBlockDel').click();
+  const b=document.querySelector('#doc-toast button'); if(!b) return false;
+  const r=b.getBoundingClientRect(), hit=document.elementFromPoint(r.left+r.width/2, r.top+r.height/2);
+  return hit===b || b.contains(hit);   // pointer-events:none 이면 토스트/문서가 잡힌다
+}));
+await setup();
+check('block: 첫 자식 블록도 제자리에 복원된다', await page.evaluate(()=>{
+  window.__put('f-h3'); document.getElementById('doc-ebBlockDel').click();
+  document.querySelector('#doc-toast button').click();
+  const card=document.querySelector('.card');
+  return [...card.children].map(x=>x.id).join(',')==='f-h3,f-p,f-tag';
+}));
+await setup();
+check('block: 외곽선 표시는 자동저장 백업에 남지 않는다', await page.evaluate(async()=>{
+  window.__put('f-p'); document.getElementById('doc-ebBlockPick').click();
+  document.getElementById('doc-content').dispatchEvent(new Event('input',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,900));
+  const id=document.body.dataset.docId, key='docedit:autosave:'+(id||('url:'+location.origin+location.pathname));
+  const a=JSON.parse(localStorage.getItem(key)||'{}');
+  return typeof a.html==='string' && !/doc-ed-block-target/.test(a.html) && !!document.querySelector('#doc-content .doc-ed-block-target');
+}));
+await setup();
+await page.evaluate(()=>{ window.__put('f-p'); document.getElementById('doc-ebBlockDel').click();
+  document.getElementById('doc-notesBtn').click(); document.getElementById('doc-notesInput').focus(); });
+await page.keyboard.press('ControlOrMeta+z');
+check('block: 메모 입력칸에서 누른 Ctrl+Z는 블록을 되살리지 않는다', await page.evaluate(()=>{
+  const gone=!document.getElementById('f-p');
+  document.getElementById('doc-notesClose').click();
+  return gone;
+}));
+await setup();
+await page.evaluate(async()=>{
+  window.prompt=()=>'T';
+  window.showSaveFilePicker=async()=>({name:'t.html',queryPermission:async()=>'granted',createWritable:async()=>({write:async()=>{},close:async()=>{}})});
+  await window.DocEditor.save();
+  document.getElementById('doc-content').innerHTML='<p id="f-x">바뀐 본문</p>';
+  await window.DocEditor.save();
+  window.DocEditor.edit(true);
+  window.__put('f-x'); document.getElementById('doc-ebBlockDel').click();
+  document.getElementById('doc-historyBtn').click();
+  document.querySelector('#doc-hist-list .doc-ed-hist-item').click();
+  document.querySelector('#doc-hist-preview .doc-ed-btn.primary').click();
+});
+await page.keyboard.press('ControlOrMeta+z');
+check('block: 히스토리 복원 뒤 Ctrl+Z가 버려진 블록을 되살리지 않는다', await page.evaluate(()=>{
+  const c=document.getElementById('doc-content');
+  return !document.getElementById('f-x') && !!document.querySelector('.card') && c.querySelectorAll('.card > *').length===3;
+}));
 await page.evaluate(()=>{ window.DocEditor.edit(false); Object.keys(localStorage).filter(k=>k.startsWith('docedit:')).forEach(k=>localStorage.removeItem(k)); });
 
 console.log(JSON.stringify({pass:true,count:results.length,results}));

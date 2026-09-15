@@ -25,7 +25,17 @@
   var lastBackedUpNotes='[]';
   var notes=loadNotes();
   var comparing=false, pristineHtml=null; // 비교 모드 (Task 6). 비교 중에는 화면 대신 원본 문자열이 진짜 본문이다.
-  function getContentHtml(){ return comparing?pristineHtml:content.innerHTML; }
+  function getContentHtml(){
+    if(comparing) return pristineHtml;
+    if(!blockTarget) return content.innerHTML;
+    // 삭제 대상 임시 외곽선은 저장본·백업·히스토리 어디에도 남기지 않는다.
+    var had=blockTarget.getAttribute('class');
+    blockTarget.classList.remove('doc-ed-block-target');
+    if(!blockTarget.className) blockTarget.removeAttribute('class');
+    var html=content.innerHTML;
+    if(had!==null) blockTarget.setAttribute('class',had);
+    return html;
+  }
   function sanitizeNotes(arr){
     if(!Array.isArray(arr)) return [];
     var seen=Object.create(null);
@@ -35,7 +45,7 @@
     });
   }
   function loadNotes(){ try{ return sanitizeNotes(JSON.parse(notesEl.textContent||'[]')); }catch(e){ return []; } }
-  function afterContentReplaced(){ reconcileNotes(); renderNotes(); }
+  function afterContentReplaced(){ markTarget(null); pendingDelete=null; reconcileNotes(); renderNotes(); }
   var originalPaddingTop=body.style.paddingTop;
   var originalPaddingPixels=parseFloat(getComputedStyle(body).paddingTop)||0;
   var layoutFrame=null;
@@ -362,23 +372,27 @@
     var n=nearestBlock(el), tr;
     if(n && (n.tagName==='TD'||n.tagName==='TH')){ tr=n.closest('tr'); if(tr && content.contains(tr)) n=tr; }
     while(n && (n.tagName==='TBODY'||n.tagName==='THEAD'||n.tagName==='TFOOT')) n=nearestBlock(n.parentElement);
+    // 박스가 없는 요소(display:contents 등)는 외곽선이 보이지 않아 대상으로 삼지 않는다.
+    while(n && n!==content && !n.getClientRects().length) n=nearestBlock(n.parentElement);
     return (n && n!==content && content.contains(n))?n:null;
   }
   function markTarget(el){
-    if(blockTarget) blockTarget.classList.remove('doc-ed-block-target');
+    if(blockTarget){ blockTarget.classList.remove('doc-ed-block-target'); if(!blockTarget.className) blockTarget.removeAttribute('class'); }
     blockTarget=el||null;
     if(blockTarget) blockTarget.classList.add('doc-ed-block-target');
   }
   function blockName(el){
     if(!el) return '블록';
-    var map={H1:'제목 1',H2:'제목 2',H3:'제목 3',H4:'제목 4',P:'본문',LI:'목록 항목',BLOCKQUOTE:'인용',
-             TR:'표 행',TABLE:'표',UL:'목록',OL:'목록',FIGURE:'그림',SECTION:'구역',ASIDE:'보조 구역'};
-    return map[el.tagName]||el.tagName.toLowerCase();
+    var map={H1:'제목 1',H2:'제목 2',H3:'제목 3',H4:'제목 4',H5:'제목 5',H6:'제목 6',P:'본문',
+             LI:'목록 항목',BLOCKQUOTE:'인용',TR:'표 행',TABLE:'표',UL:'목록',OL:'목록',DL:'목록',
+             DT:'용어',DD:'설명',FIGURE:'그림',FIGCAPTION:'그림 설명',PRE:'코드',
+             SECTION:'구역',ARTICLE:'구역',HEADER:'머리 구역',FOOTER:'꼬리 구역',ASIDE:'보조 구역'};
+    return map[el.tagName]||'블록';
   }
   function pickBlock(){
     if(!editing){ toast('편집 모드에서 사용할 수 있습니다.'); return null; }
     var next=blockTarget?resolveBlock(blockTarget.parentElement):resolveBlock(curEl());
-    if(!next){ toast(blockTarget?'더 넓힐 상위 블록이 없습니다.':'커서를 삭제할 블록 안에 두세요.'); return blockTarget; }
+    if(!next){ toast(blockTarget?'더 넓힐 상위 블록이 없습니다.':'커서를 삭제할 블록 안에 두세요.'); return null; }
     markTarget(next);
     next.scrollIntoView({block:'nearest'});
     toast(blockName(next)+' 블록을 지정했습니다. 다시 누르면 상위 블록으로 넓힙니다.');
@@ -389,22 +403,32 @@
     if(!editing){ toast('편집 모드에서 사용할 수 있습니다.'); return false; }
     var el=blockTarget||resolveBlock(curEl());
     if(!el){ toast('커서를 삭제할 블록 안에 두세요.'); return false; }
-    var parent=el.parentElement, next=el.nextSibling, label=blockName(el);
+    var parent=el.parentElement, next=el.nextSibling, prev=el.previousSibling, label=blockName(el);
     markTarget(null);
-    el.classList.remove('doc-ed-block-target');
+    el.classList.remove('doc-ed-block-target'); if(!el.className) el.removeAttribute('class');
     parent.removeChild(el);
-    pendingDelete={node:el,parent:parent,next:next};
-    savedRange=null;
+    pendingDelete={node:el,parent:parent,next:next,prev:prev};
+    savedRange=null; placeCaretAfterRemoval(parent,next,prev);
     reconcileNotes(); renderNotes(); updateInspector(); scheduleAutosave();
     toast(label+' 블록을 삭제했습니다.',8000,{label:'되돌리기',fn:undoBlock});
     return true;
   }
+  // 삭제 직후 커서가 엉뚱한 곳에 남지 않게 인접 블록으로 옮긴다.
+  function placeCaretAfterRemoval(parent,next,prev){
+    var at=(next&&next.parentNode===parent)?next:((prev&&prev.parentNode===parent)?prev:null), target=at||parent;
+    if(!target || !(target===content||content.contains(target))) return;
+    try{
+      var r=document.createRange(); r.selectNodeContents(target); r.collapse(at===next);
+      var s=window.getSelection(); s.removeAllRanges(); s.addRange(r); savedRange=r.cloneRange();
+    }catch(e){}
+  }
   function undoBlock(){
-    if(!pendingDelete) return false;
-    var d=pendingDelete; pendingDelete=null;
-    if(d.parent!==content && !content.contains(d.parent)) content.appendChild(d.node);
-    else if(d.next && d.next.parentNode===d.parent) d.parent.insertBefore(d.node,d.next);
-    else d.parent.appendChild(d.node);
+    if(!pendingDelete){ toast('되돌릴 블록 삭제가 없습니다.'); return false; }
+    var d=pendingDelete, parent=d.parent; pendingDelete=null;
+    if(!parent || !(parent===content || content.contains(parent))) content.appendChild(d.node);
+    else if(d.next && d.next.parentNode===parent) parent.insertBefore(d.node,d.next);
+    else if(d.prev && d.prev.parentNode===parent) parent.insertBefore(d.node,d.prev.nextSibling);
+    else parent.appendChild(d.node);
     savedRange=null;
     reconcileNotes(); renderNotes(); updateInspector(); scheduleAutosave();
     toast('삭제한 블록을 되돌렸습니다.');
@@ -587,7 +611,7 @@
     var et=clone.querySelector('#doc-editToggle'); if(et){ et.classList.remove('on'); et.textContent='✎ 편집'; }
     var attach=clone.querySelector('#doc-attachBtn');if(attach)attach.disabled=false;
     clone.querySelectorAll('#doc-content .doc-ed-note-active').forEach(function(m){m.classList.remove('doc-ed-note-active');});
-    clone.querySelectorAll('#doc-content .doc-ed-block-target').forEach(function(m){m.classList.remove('doc-ed-block-target');});
+    clone.querySelectorAll('#doc-content .doc-ed-block-target').forEach(function(m){m.classList.remove('doc-ed-block-target'); if(!m.className) m.removeAttribute('class');});
     var ct=clone.querySelector('#doc-toast'); if(ct) ct.textContent='';
     ['#doc-notesList','#doc-changesSummary','#doc-changesBase'].forEach(function(s){var el=clone.querySelector(s); if(el) el.innerHTML='';});
     var nt=clone.querySelector('#doc-notesTarget'); if(nt){ nt.classList.remove('has'); var nq=nt.querySelector('.q'); if(nq) nq.textContent='문서 전체'; var nx=nt.querySelector('#doc-notesTargetClear'); if(nx) nx.hidden=true; }
@@ -627,7 +651,7 @@
       ['--doc-ed-controls-height','--doc-ed-controls-width','--doc-ed-tools-bottom','--doc-ed-visible-height'].forEach(function(name){b.style.removeProperty(name);});
     }
     var c=clone.querySelector('#doc-content');
-    if(c){ c.removeAttribute('contenteditable'); c.querySelectorAll('.doc-ed-block-target').forEach(function(m){m.classList.remove('doc-ed-block-target');}); var marks=c.querySelectorAll('mark.doc-ed-note'); for(var k=0;k<marks.length;k++) unwrapMark(marks[k]); }
+    if(c){ c.removeAttribute('contenteditable'); c.querySelectorAll('.doc-ed-block-target').forEach(function(m){m.classList.remove('doc-ed-block-target'); if(!m.className) m.removeAttribute('class');}); var marks=c.querySelectorAll('mark.doc-ed-note'); for(var k=0;k<marks.length;k++) unwrapMark(marks[k]); }
     var comments=[],walker=document.createTreeWalker(clone,NodeFilter.SHOW_COMMENT),node;
     while((node=walker.nextNode()))if(/doc-editor/.test(node.data) && !(c&&c.contains(node)))comments.push(node);
     comments.forEach(function(comment){comment.remove();});
@@ -801,7 +825,10 @@
     if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==='s'||e.key==='S')){ e.preventDefault(); saveToFile(false); }
     if((e.metaKey||e.ctrlKey)&&(e.key==='e'||e.key==='E')){ e.preventDefault(); setEdit(!editing); }
     // 직전 동작이 블록 삭제였을 때만 가로챈다. 그 뒤 다른 편집이 있었으면 브라우저 기본 되돌리기로 넘긴다.
-    if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==='z'||e.key==='Z')&&pendingDelete){ e.preventDefault(); undoBlock(); }
+    if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==='z'||e.key==='Z')&&pendingDelete){
+      var tn=e.target&&e.target.tagName;   // 메모 입력칸 등 폼 필드의 되돌리기는 브라우저에 맡긴다
+      if(tn!=='INPUT'&&tn!=='TEXTAREA'){ e.preventDefault(); undoBlock(); }
+    }
   });
 
   /* ---------- 창 크기 변경 시 상단 스페이서 갱신 (툴바 줄바꿈 대응) ---------- */

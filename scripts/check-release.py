@@ -44,6 +44,9 @@ def main():
     assert re.search(r'^description: .+', front, re.M), 'Missing description'
     assert re.search(r'^metadata:\n  version: "[0-9]+\.[0-9]+\.[0-9]+"', front, re.M), 'Missing version metadata'
     assert not re.search(r'^version:', front, re.M), 'Use metadata.version'
+    version = re.search(r'^  version: "([0-9.]+)"$', front, re.M).group(1)
+    for name in ['README.md', 'README.ko.md', 'README.en.md']:
+        assert version in (ROOT / name).read_text(), f'{name} does not state version {version}'
     subprocess.run([sys.executable, str(ROOT / 'assets/build-template.py'), '--check'], check=True)
     css = (ROOT / 'assets/doc-editor.css').read_text().strip()
     js = ((ROOT / 'assets/doc-attach.js').read_text() + '\n' + (ROOT / 'assets/doc-diff.js').read_text()
