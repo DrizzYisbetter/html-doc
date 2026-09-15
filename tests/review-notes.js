@@ -437,4 +437,85 @@ check('responsive: desktop panel sits below the controls and the bar avoids them
   return panelOk && barOk;
 }));
 
+
+// ---- F. 블록 삭제 ----
+await fresh();
+const FIX='<div class="card"><h3 id="f-h3">제목</h3><p id="f-p">본문 문단</p><p class="tag" id="f-tag">TAG</p></div>'
+        +'<table><tbody><tr id="f-r1"><td id="f-c1">가</td><td>나</td></tr><tr id="f-r2"><td>다</td><td>라</td></tr></tbody></table>';
+const setup=()=>page.evaluate(html=>{
+  const c=document.getElementById('doc-content'); c.innerHTML=html;
+  window.DocEditor.edit(true);
+  window.__put=function(id){const el=document.getElementById(id),t=el.firstChild,r=document.createRange();
+    r.setStart(t,0);r.collapse(true);const s=getSelection();s.removeAllRanges();s.addRange(r);
+    document.dispatchEvent(new Event('selectionchange'));};
+  window.__target=function(){const el=c.querySelector('.doc-ed-block-target');return el?el.tagName+(el.className.replace(/\s*doc-ed-block-target\s*/,'')?'.'+el.className.replace(/\s*doc-ed-block-target\s*/,'').split(' ')[0]:''):null;};
+},FIX);
+
+await setup();
+check('block: 블록 선택이 커서가 있는 문단을 대상으로 잡는다', await page.evaluate(()=>{
+  window.__put('f-p'); document.getElementById('doc-ebBlockPick').click();
+  return window.__target()==='P';
+}));
+check('block: 블록 선택을 다시 누르면 상위 블록으로 넓어진다', await page.evaluate(()=>{
+  document.getElementById('doc-ebBlockPick').click();
+  return window.__target()==='DIV.card';
+}));
+await setup();
+check('block: 삭제해도 이웃 블록의 클래스가 보존된다', await page.evaluate(()=>{
+  window.__put('f-p'); document.getElementById('doc-ebBlockDel').click();
+  const tag=document.getElementById('f-tag');
+  return !document.getElementById('f-p') && !!tag && tag.className==='tag' && tag.textContent==='TAG';
+}));
+check('block: 토스트의 되돌리기가 원래 자리에 복원한다', await page.evaluate(()=>{
+  const b=document.querySelector('#doc-toast button'); if(!b) return false; b.click();
+  const card=document.querySelector('.card');
+  return [...card.children].map(x=>x.id).join(',')==='f-h3,f-p,f-tag';
+}));
+await setup();
+check('block: 표 칸에서 삭제하면 그 행만 사라지고 표는 남는다', await page.evaluate(()=>{
+  window.__put('f-c1'); document.getElementById('doc-ebBlockDel').click();
+  const c=document.getElementById('doc-content');
+  return !document.getElementById('f-r1') && !!document.getElementById('f-r2') && c.querySelectorAll('table tr').length===1;
+}));
+await setup();
+await page.evaluate(()=>{ window.__put('f-p'); document.getElementById('doc-ebBlockDel').click(); });
+await page.keyboard.press('ControlOrMeta+z');
+check('block: Ctrl+Z로도 복원된다', await page.evaluate(()=>{
+  const card=document.querySelector('.card');
+  return !!document.getElementById('f-p') && [...card.children].map(x=>x.id).join(',')==='f-h3,f-p,f-tag';
+}));
+await setup();
+check('block: 삭제된 블록의 메모는 위치 없음으로 남는다', await page.evaluate(()=>{
+  const p=document.getElementById('f-p'), t=p.firstChild, r=document.createRange();
+  r.setStart(t,0); r.setEnd(t,2);
+  const id=window.DocEditor.notes.add('이 블록 메모',{range:r});
+  window.__put('f-p'); document.getElementById('doc-ebBlockDel').click();
+  const n=window.DocEditor.notes.list().find(x=>x.id===id);
+  const gone=!document.querySelector('mark[data-doc-note="'+id+'"]');
+  window.DocEditor.notes.remove(id);
+  return !!n && n.text==='이 블록 메모' && n.anchored===true && gone;
+}));
+await setup();
+check('block: 저장본과 배포본에 대상 표시가 남지 않는다', await page.evaluate(()=>{
+  window.__put('f-p'); document.getElementById('doc-ebBlockPick').click();
+  // 저장본에는 엔진 CSS/JS가 인라인돼 문자열은 늘 존재한다. DOM으로 확인한다.
+  const parse=h=>new DOMParser().parseFromString(h,'text/html');
+  const saved=parse(window.DocEditor.getHTML()), ro=parse(window.DocEditor.getReadOnlyHTML());
+  return window.__target()==='P'
+    && saved.querySelectorAll('#doc-content .doc-ed-block-target').length===0
+    && ro.querySelectorAll('#doc-content .doc-ed-block-target').length===0
+    && !!document.querySelector('#doc-content .doc-ed-block-target');
+}));
+await setup();
+check('block: 비교 모드에서는 블록 삭제가 거부된다', await page.evaluate(()=>{
+  window.DocEditor.edit(false); window.DocEditor.compare(true);
+  const before=window.DocEditor.getHTML();
+  const apiRefused=window.DocEditor.blocks.remove()===false;
+  document.getElementById('doc-ebBlockDel').click();
+  const bodyUnchanged=window.DocEditor.getHTML()===before, stillComparing=window.DocEditor.isComparing();
+  window.DocEditor.compare(false);
+  return apiRefused && bodyUnchanged && stillComparing;
+}));
+await page.evaluate(()=>{ window.DocEditor.edit(false); Object.keys(localStorage).filter(k=>k.startsWith('docedit:')).forEach(k=>localStorage.removeItem(k)); });
+
 console.log(JSON.stringify({pass:true,count:results.length,results}));

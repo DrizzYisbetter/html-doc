@@ -24,7 +24,7 @@ const result=await page.evaluate(async()=>{
    check(`${width}x${height}: inspector starts collapsed`,!shown('doc-inspector'));
    check(`${width}x${height}: controls are touch sized`,['doc-editToggle','doc-saveBtn','doc-moreToggle','doc-inspectorToggle'].every(id=>rect(id).height>=44));
    const toolbar=d.getElementById('doc-editbar');toolbar.scrollLeft=toolbar.scrollWidth;await settle();
-   check(`${width}x${height}: toolbar scroll exposes final tool`,toolbar.scrollLeft>0 && d.querySelector('[data-cmd="removeFormat"]').getBoundingClientRect().right<=w.innerWidth+1);
+   check(`${width}x${height}: toolbar scroll exposes final tool`,toolbar.scrollLeft>0 && d.getElementById('doc-ebBlockDel').getBoundingClientRect().right<=w.innerWidth+1);
    d.getElementById('doc-inspectorToggle').click();await settle();const panel=rect('doc-inspector');
    check(`${width}x${height}: expanded inspector fits`,shown('doc-inspector') && panel.left>=0 && panel.right<=w.innerWidth && panel.top>=bar.bottom && panel.bottom<=w.innerHeight+1);
    d.getElementById('doc-inspectorClose').click();check(`${width}x${height}: inspector closes`,!shown('doc-inspector'));

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.0
+
+- Add block deletion. **블록 선택** outlines the block at the caret and widens to the parent on a second press; **블록 삭제** removes it, with 되돌리기 in a toast and Ctrl/Cmd+Z right after the deletion.
+- Deleting from a table cell removes the row, since dropping a single cell breaks the column alignment.
+- The engine detaches the node instead of using the browser's delete, which merges blocks and strips the surviving block's class, and cannot remove a table row.
+
 ## 1.6.1
 
 - Fix: documents converted by `tools/add-editor.html` from HTML without an existing `#doc-content` dropped every key press. The `display:contents` wrapper generates no box, so the editing root could not take focus (issue #1).

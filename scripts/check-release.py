@@ -50,7 +50,7 @@ def main():
           + '\n' + (ROOT / 'assets/doc-editor.js').read_text()).strip()
     expected = ['doc-content', 'doc-controls', 'doc-editbar', 'doc-inspector', 'doc-notes-panel', 'doc-changes-bar', 'doc-editflag',
                 'doc-restore-banner', 'doc-history-modal', 'doc-toast', 'doc-history', 'doc-notes', 'doc-attachBtn', 'doc-exportBtn',
-                'doc-notesBtn', 'doc-changesBtn', 'doc-ebNote']
+                'doc-notesBtn', 'doc-changesBtn', 'doc-ebNote', 'doc-ebBlockPick', 'doc-ebBlockDel']
     for name in ['assets/skeleton.html', 'examples/demo.html']:
         doc = Document((ROOT / name).read_text())
         counts = Counter(doc.ids)

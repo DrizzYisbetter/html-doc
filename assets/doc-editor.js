@@ -46,7 +46,16 @@
   function loadHistory(){ try{ var h=JSON.parse(histEl.textContent||'[]'); return Array.isArray(h)?h.filter(function(v){return v && typeof v.html==='string' && typeof v.title==='string' && typeof v.ts==='string';}).slice(0,30).map(function(v){return {ts:v.ts,title:v.title,html:v.html,author:typeof v.author==='string'?v.author:''};}):[]; }catch(e){ return []; } }
   function escForScript(s){ return s.replace(/</g,'\\u003c'); }
   function escapeHtml(s){ return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
-  function toast(t,ms){ var el=document.getElementById('doc-toast'); if(!el) return; el.textContent=t; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(function(){el.classList.remove('show');},ms||2600); }
+  function toast(t,ms,action){
+    var el=document.getElementById('doc-toast'); if(!el) return;
+    el.textContent=t;
+    if(action){
+      var b=document.createElement('button'); b.type='button'; b.className='doc-ed-toast-act'; b.textContent=action.label;
+      b.onclick=function(){ el.classList.remove('show'); clearTimeout(el._t); action.fn(); };
+      el.appendChild(b);
+    }
+    el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(function(){el.classList.remove('show');},ms||2600);
+  }
   function $(id){ return document.getElementById(id); }
 
   /* ---------- 작성자 이름 (브라우저별로 기억, 문서에는 넣지 않음) ---------- */
@@ -303,6 +312,7 @@
       if(!window.DocEditorDiff){ toast('비교 엔진이 없습니다. 크롬과 엔진을 함께 업데이트하세요.'); return; }
       if(editing) setEdit(false);
       captureBasePadding();
+      markTarget(null); pendingDelete=null;
       pristineHtml=content.innerHTML; comparing=true; changeIndex=-1; body.classList.add('doc-changes');
       baseline=pickDefaultBaseline(); fillBaseOptions(); renderCompare();
     }else{
@@ -334,6 +344,71 @@
     var html=await window.DocEditorAttach.readFile(file), doc=new DOMParser().parseFromString(html,'text/html'), root=doc.getElementById('doc-content')||doc.body;
     fileBaseline={kind:'file',label:'파일: '+file.name,html:root?root.innerHTML:''};
     fillBaseOptions(); useBaseline(fileBaseline);
+  }
+
+  /* ---------- 블록 삭제 ---------- */
+  // 브라우저 기본 삭제는 이웃 블록과 병합하면서 살아남은 쪽의 class를 잃고, 표의 행은 지우지 못한다.
+  // 그래서 DOM에서 직접 떼어내고 되돌리기를 직접 붙인다(원시 제거는 Ctrl+Z 대상이 아니다).
+  var blockTarget=null, pendingDelete=null;
+  function isBlockish(el){
+    if(!el || el.nodeType!==1 || el===content) return false;
+    if(el.parentElement===content) return true;
+    var d=getComputedStyle(el).display;
+    return d==='block'||d==='flex'||d==='grid'||d==='list-item'||d==='flow-root'||d.indexOf('table')===0;
+  }
+  function nearestBlock(el){ var n=el; while(n && n!==content){ if(isBlockish(n)) return n; n=n.parentElement; } return null; }
+  // 표 칸만 지우면 열이 어긋나므로 행 단위로 올린다. 행 묶음(tbody 등)은 건너뛴다.
+  function resolveBlock(el){
+    var n=nearestBlock(el), tr;
+    if(n && (n.tagName==='TD'||n.tagName==='TH')){ tr=n.closest('tr'); if(tr && content.contains(tr)) n=tr; }
+    while(n && (n.tagName==='TBODY'||n.tagName==='THEAD'||n.tagName==='TFOOT')) n=nearestBlock(n.parentElement);
+    return (n && n!==content && content.contains(n))?n:null;
+  }
+  function markTarget(el){
+    if(blockTarget) blockTarget.classList.remove('doc-ed-block-target');
+    blockTarget=el||null;
+    if(blockTarget) blockTarget.classList.add('doc-ed-block-target');
+  }
+  function blockName(el){
+    if(!el) return '블록';
+    var map={H1:'제목 1',H2:'제목 2',H3:'제목 3',H4:'제목 4',P:'본문',LI:'목록 항목',BLOCKQUOTE:'인용',
+             TR:'표 행',TABLE:'표',UL:'목록',OL:'목록',FIGURE:'그림',SECTION:'구역',ASIDE:'보조 구역'};
+    return map[el.tagName]||el.tagName.toLowerCase();
+  }
+  function pickBlock(){
+    if(!editing){ toast('편집 모드에서 사용할 수 있습니다.'); return null; }
+    var next=blockTarget?resolveBlock(blockTarget.parentElement):resolveBlock(curEl());
+    if(!next){ toast(blockTarget?'더 넓힐 상위 블록이 없습니다.':'커서를 삭제할 블록 안에 두세요.'); return blockTarget; }
+    markTarget(next);
+    next.scrollIntoView({block:'nearest'});
+    toast(blockName(next)+' 블록을 지정했습니다. 다시 누르면 상위 블록으로 넓힙니다.');
+    return next;
+  }
+  function removeBlock(){
+    if(comparing){ toast('비교를 닫고 편집 모드에서 삭제할 수 있습니다.'); return false; }
+    if(!editing){ toast('편집 모드에서 사용할 수 있습니다.'); return false; }
+    var el=blockTarget||resolveBlock(curEl());
+    if(!el){ toast('커서를 삭제할 블록 안에 두세요.'); return false; }
+    var parent=el.parentElement, next=el.nextSibling, label=blockName(el);
+    markTarget(null);
+    el.classList.remove('doc-ed-block-target');
+    parent.removeChild(el);
+    pendingDelete={node:el,parent:parent,next:next};
+    savedRange=null;
+    reconcileNotes(); renderNotes(); updateInspector(); scheduleAutosave();
+    toast(label+' 블록을 삭제했습니다.',8000,{label:'되돌리기',fn:undoBlock});
+    return true;
+  }
+  function undoBlock(){
+    if(!pendingDelete) return false;
+    var d=pendingDelete; pendingDelete=null;
+    if(d.parent!==content && !content.contains(d.parent)) content.appendChild(d.node);
+    else if(d.next && d.next.parentNode===d.parent) d.parent.insertBefore(d.node,d.next);
+    else d.parent.appendChild(d.node);
+    savedRange=null;
+    reconcileNotes(); renderNotes(); updateInspector(); scheduleAutosave();
+    toast('삭제한 블록을 되돌렸습니다.');
+    return true;
   }
 
   /* ---------- 편집 모드 ---------- */
@@ -373,7 +448,7 @@
     try{ document.execCommand('styleWithCSS',false,true); }catch(e){}
     setMore(false);
     if(on) updateInspector();
-    else { setInspector(false); if(!comparing) restoreBasePadding(); doAutosave(); }
+    else { setInspector(false); markTarget(null); pendingDelete=null; if(!comparing) restoreBasePadding(); doAutosave(); }
     updateEditorLayout();
   }
 
@@ -442,7 +517,7 @@
 
   document.addEventListener('selectionchange', function(){
     var s=window.getSelection();
-    if(s && s.rangeCount){ var r=s.getRangeAt(0); if(content.contains(r.commonAncestorContainer)){ savedRange=r.cloneRange(); if(!r.collapsed) targetCleared=false; updateInspector(); } }
+    if(s && s.rangeCount){ var r=s.getRangeAt(0); if(content.contains(r.commonAncestorContainer)){ savedRange=r.cloneRange(); if(!r.collapsed) targetCleared=false; if(blockTarget && !blockTarget.contains(r.commonAncestorContainer)) markTarget(null); updateInspector(); } }
   });
 
   /* ---------- 속성 패널 ---------- */
@@ -487,7 +562,9 @@
   bind('doc-ebBg','input', function(){ applyBack(this.value); });
   bind('doc-ebBgClear','click', function(){ applyBack('transparent'); });
   bind('doc-ebTable','click', insertTable);
-  content.addEventListener('input', function(){ if(editing) scheduleAutosave(); });
+  bind('doc-ebBlockPick','click', pickBlock);
+  bind('doc-ebBlockDel','click', removeBlock);
+  content.addEventListener('input', function(){ pendingDelete=null; if(editing) scheduleAutosave(); });
   function bind(id,ev,fn){ var el=$(id); if(el) el.addEventListener(ev,fn); }
 
   /* ---------- 직렬화 / 저장 ---------- */
@@ -510,6 +587,8 @@
     var et=clone.querySelector('#doc-editToggle'); if(et){ et.classList.remove('on'); et.textContent='✎ 편집'; }
     var attach=clone.querySelector('#doc-attachBtn');if(attach)attach.disabled=false;
     clone.querySelectorAll('#doc-content .doc-ed-note-active').forEach(function(m){m.classList.remove('doc-ed-note-active');});
+    clone.querySelectorAll('#doc-content .doc-ed-block-target').forEach(function(m){m.classList.remove('doc-ed-block-target');});
+    var ct=clone.querySelector('#doc-toast'); if(ct) ct.textContent='';
     ['#doc-notesList','#doc-changesSummary','#doc-changesBase'].forEach(function(s){var el=clone.querySelector(s); if(el) el.innerHTML='';});
     var nt=clone.querySelector('#doc-notesTarget'); if(nt){ nt.classList.remove('has'); var nq=nt.querySelector('.q'); if(nq) nq.textContent='문서 전체'; var nx=nt.querySelector('#doc-notesTargetClear'); if(nx) nx.hidden=true; }
     var ni=clone.querySelector('#doc-notesInput'); if(ni) ni.textContent='';
@@ -548,7 +627,7 @@
       ['--doc-ed-controls-height','--doc-ed-controls-width','--doc-ed-tools-bottom','--doc-ed-visible-height'].forEach(function(name){b.style.removeProperty(name);});
     }
     var c=clone.querySelector('#doc-content');
-    if(c){ c.removeAttribute('contenteditable'); var marks=c.querySelectorAll('mark.doc-ed-note'); for(var k=0;k<marks.length;k++) unwrapMark(marks[k]); }
+    if(c){ c.removeAttribute('contenteditable'); c.querySelectorAll('.doc-ed-block-target').forEach(function(m){m.classList.remove('doc-ed-block-target');}); var marks=c.querySelectorAll('mark.doc-ed-note'); for(var k=0;k<marks.length;k++) unwrapMark(marks[k]); }
     var comments=[],walker=document.createTreeWalker(clone,NodeFilter.SHOW_COMMENT),node;
     while((node=walker.nextNode()))if(/doc-editor/.test(node.data) && !(c&&c.contains(node)))comments.push(node);
     comments.forEach(function(comment){comment.remove();});
@@ -721,6 +800,8 @@
     if(e.key==='Escape'){setMore(false);setInspector(false);setNotes(false);setCompare(false);var m=$('doc-history-modal');if(m)m.classList.remove('open');}
     if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==='s'||e.key==='S')){ e.preventDefault(); saveToFile(false); }
     if((e.metaKey||e.ctrlKey)&&(e.key==='e'||e.key==='E')){ e.preventDefault(); setEdit(!editing); }
+    // 직전 동작이 블록 삭제였을 때만 가로챈다. 그 뒤 다른 편집이 있었으면 브라우저 기본 되돌리기로 넘긴다.
+    if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==='z'||e.key==='Z')&&pendingDelete){ e.preventDefault(); undoBlock(); }
   });
 
   /* ---------- 창 크기 변경 시 상단 스페이서 갱신 (툴바 줄바꿈 대응) ---------- */
@@ -751,6 +832,11 @@
     compareWith:function(kind,index){ if(!comparing) setCompare(true); if(!comparing) return; var c=baselineCandidates(), i; for(i=0;i<c.length;i++){ if(c[i].kind===kind && (kind!=='history'||c[i].index===index)){ useBaseline(c[i]); return; } } },
     revertChange:function(i){ return revertChange(i); },
     changes:function(){ return {counts:cmp?cmp.counts:{ins:0,del:0,mod:0,fmt:0}, total:changeTotal(), index:changeIndex, baseline:baseline?baseline.label:''}; },
+    blocks:{
+      pick:function(){ var el=pickBlock(); return el?blockName(el):null; },
+      remove:function(){ return removeBlock(); },
+      undo:function(){ return undoBlock(); }
+    },
     notes:{
       list:function(){ return JSON.parse(JSON.stringify(notes)); },
       add:function(text,opts){ opts=opts||{}; var target=null; if(opts.range) target=targetFrom(opts.range); else if(opts.anchor) target=targetFrom(savedRange); var n=addNote(text,target); return n?n.id:null; },

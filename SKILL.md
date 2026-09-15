@@ -2,7 +2,7 @@
 name: html-doc
 description: Create editable, standalone HTML documents, add an inline editor to existing HTML, and export clean read-only HTML. Use for reports, guides, letters, and other documents that users want to edit in a browser and save as HTML. Includes review tools: change comparison against saved versions and anchored notes with replies.
 metadata:
-  version: "1.6.1"
+  version: "1.7.0"
 ---
 
 # HTML Doc
@@ -57,6 +57,12 @@ On screens up to 900px, extra actions are in **더보기**. The formatting toolb
 - **Author name:** the editor asks for a name once per browser (first note or first save) and stores it in `localStorage` as `docedit:author`. It can be changed in the notes panel. The name is not stored in the document except as the provenance of a saved version (`data-doc-saved-by`, `data-doc-saved-at` on `body`) and in history entries (`author`).
 - **Backup safety:** the first regular save assigns `data-doc-id` so browser backups are keyed per document instead of per path. Backups record the provenance of the body they were made from; when a backup does not match the opened file, the restore banner says so, and restoring keeps the current body in the history first.
 - On screens up to 900px the **메모** control hides while editing (use the toolbar **메모** button) and **변경 사항** is in **더보기**.
+
+## Block deletion (1.7.0)
+
+**블록 선택** outlines the block holding the caret, and pressing it again widens the outline to the parent block. **블록 삭제** removes the outlined block, or the block holding the caret when nothing is outlined. A toast offers 되돌리기, and Ctrl/Cmd+Z restores the block as long as no other edit happened in between.
+
+The engine detaches the node directly instead of using the browser's own delete. The native path merges the deleted block into its neighbour and the surviving block loses its class, and it cannot remove a table row at all. Deleting from inside a table cell removes the whole row, because dropping a single cell breaks the column alignment. The outline is a temporary class that never reaches saved or exported files.
 
 ## Maintenance and existing-document upgrades
 

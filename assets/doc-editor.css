@@ -155,6 +155,8 @@ body.doc-notes-open #doc-inspector{ display:none; }
 #doc-content mark.doc-ed-note{ background:rgba(250,204,21,.35); color:inherit; border-bottom:2px solid #f59e0b; cursor:pointer; padding:0; }
 #doc-content mark.doc-ed-note.doc-ed-note-resolved{ background:none; border-bottom:1px dotted #d97706; }
 #doc-content mark.doc-ed-note.doc-ed-note-active{ background:rgba(245,158,11,.55); outline:2px solid #f59e0b; outline-offset:1px; }
+/* 삭제 대상 블록 표시 (편집 중에만, 문서 팔레트와 무관한 고정 경고색) */
+body.doc-editing #doc-content .doc-ed-block-target{ outline:2px solid #ef4444; outline-offset:3px; background:rgba(239,68,68,.07); }
 
 /* ---------- 변경 사항 바 (비교 모드에서만 · 편집 툴바 자리) ---------- */
 #doc-changes-bar{
@@ -227,6 +229,8 @@ body.doc-editing #doc-editflag{
   font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
 }
 #doc-toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+.doc-ed-toast-act{ margin-left:12px; border:1px solid rgba(255,255,255,.5); background:transparent; color:#fff; font-family:inherit; font-size:12.5px; font-weight:700; border-radius:7px; padding:3px 10px; cursor:pointer; }
+.doc-ed-toast-act:hover{ background:rgba(255,255,255,.18); }
 .doc-ed-modal{ position:fixed; inset:0; z-index:2147483004; display:none; background:rgba(16,24,40,.42);
   font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif; }
 .doc-ed-modal.open{ display:flex; align-items:center; justify-content:center; padding:28px; }
@@ -310,6 +314,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   #doc-restore-banner{ top:calc(var(--doc-ed-controls-height,60px) + 8px); max-height:calc(var(--doc-ed-visible-height,100dvh) - var(--doc-ed-controls-height,60px) - 24px); overflow-y:auto; }
   #doc-restore-banner .doc-ed-btn{ min-height:44px; }
   #doc-toast{ bottom:16px; max-width:calc(100vw - 24px); box-sizing:border-box; }
+  .doc-ed-toast-act{ min-height:36px; padding:0 12px; }
   .doc-ed-modal.open{ padding:10px; }
   .doc-ed-modal-card{ width:100%; max-height:calc(var(--doc-ed-visible-height,100dvh) - 20px); }
   .doc-ed-modal-head .doc-ed-btn{ min-height:44px; }
