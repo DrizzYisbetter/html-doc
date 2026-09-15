@@ -2,7 +2,7 @@
 name: html-doc
 description: Create editable, standalone HTML documents, add an inline editor to existing HTML, and export clean read-only HTML. Use for reports, guides, letters, and other documents that users want to edit in a browser and save as HTML. Includes review tools: change comparison against saved versions and anchored notes with replies.
 metadata:
-  version: "1.6.0"
+  version: "1.6.1"
 ---
 
 # HTML Doc
@@ -34,7 +34,7 @@ Read the template before replacing sections. It contains a document stylesheet a
 
 For an interactive conversion, open `tools/add-editor.html`, choose the HTML file, and download the editable copy. The editor's **HTML에 편집기 추가** button does the same from an existing editable document. Both retain the original file.
 
-For an agent-driven integration, preserve the input and add only the integration contract above. Reuse an existing `#doc-content`; otherwise choose a root suited to the original layout. The automatic converter wraps the body in a `display:contents` container when needed. This can affect `body > ...` CSS and parent-sensitive scripts. Inspect those cases rather than claiming universal structural compatibility.
+For an agent-driven integration, preserve the input and add only the integration contract above. Reuse an existing `#doc-content`; otherwise choose a root suited to the original layout. The automatic converter wraps the body in a `display:contents` container when needed. This can affect `body > ...` CSS and parent-sensitive scripts. A `display:contents` element generates no box and cannot take focus, so while editing the engine temporarily gives the editing root a box (`display:block`) and restores `display:contents` for view mode, saved files, and read-only exports. A root that is intentionally `flex` or `grid` is left untouched. Inspect those cases rather than claiming universal structural compatibility.
 
 The converter retains document scripts without executing them during conversion. They execute when the user opens the output. It rejects conflicting editor IDs, duplicate roots, existing editors, framesets, and CSP meta policies requiring separate review. It is not an HTML sanitizer. Relative resources still require the original folder layout.
 

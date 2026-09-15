@@ -6,7 +6,7 @@ An Agent Skills package for making editable, standalone HTML documents.
 
 Create a report, guide, or letter with an inline editor. Open the resulting HTML in a browser to edit text and formatting, save changes, recover a local backup, or download a clean read-only copy. No server, browser extension, or AI account is needed to use a generated document.
 
-**Current release: 1.6.0.** Agent instructions are in English, with a Korean reference. The editor and conversion-tool UI are currently **Korean**; document content can be in any language. This package does not yet provide an English UI toggle.
+**Current release: 1.6.1.** Agent instructions are in English, with a Korean reference. The editor and conversion-tool UI are currently **Korean**; document content can be in any language. This package does not yet provide an English UI toggle.
 
 ## Downloads
 

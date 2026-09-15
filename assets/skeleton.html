@@ -1199,10 +1199,33 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   /* ---------- 편집 모드 ---------- */
   function captureBasePadding(){ if(!editing && !comparing){ originalPaddingTop=body.style.paddingTop; originalPaddingPixels=parseFloat(getComputedStyle(body).paddingTop)||0; } }
   function restoreBasePadding(){ body.style.paddingTop=originalPaddingTop; }
+  // display:contents 인 편집 루트는 박스가 없어 포커스를 받지 못하고 키 입력이 버려진다.
+  // 편집 중에만 박스를 만들고, 보기 모드로 돌아가면 원래 값을 되돌린다(배포본·저장본은 그대로).
+  var contentsDisplay=null;
+  function applyEditDisplay(on){
+    if(on){
+      if(contentsDisplay===null && getComputedStyle(content).display==='contents'){
+        contentsDisplay=content.style.display||'';
+        content.style.setProperty('display','block','important');
+      }
+    }else if(contentsDisplay!==null){
+      content.style.removeProperty('display');
+      if(contentsDisplay) content.style.display=contentsDisplay;
+      contentsDisplay=null;
+    }
+  }
+  // 편집 중 직렬화하면 임시 display 가 사본에 남으므로 복제본에서 되돌린다.
+  function restoreCloneDisplay(clone){
+    if(contentsDisplay===null) return;
+    var c=clone.querySelector('#doc-content'); if(!c) return;
+    c.style.removeProperty('display');
+    if(contentsDisplay) c.style.display=contentsDisplay;
+  }
   function setEdit(on){
     if(on && comparing) setCompare(false);
     if(on && !editing) captureBasePadding();
     editing=on;
+    applyEditDisplay(on);
     content.setAttribute('contenteditable', on?'true':'false');
     body.classList.toggle('doc-editing', on);
     var t=$('doc-editToggle');
@@ -1334,6 +1357,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
     histEl.textContent=escForScript(JSON.stringify(history));
     notesEl.textContent=escForScript(JSON.stringify(notes));
     var clone=withPristine(function(){ return document.documentElement.cloneNode(true); });
+    restoreCloneDisplay(clone);
     clone.querySelectorAll('[data-doc-editor-download]').forEach(function(el){el.remove();});
     var b=clone.querySelector('body'); if(b){ b.classList.remove('doc-editing','doc-inspector-open','doc-notes-open','doc-changes'); b.style.paddingTop=originalPaddingTop; ['--doc-ed-controls-height','--doc-ed-controls-width','--doc-ed-tools-bottom','--doc-ed-visible-height'].forEach(function(name){b.style.removeProperty(name);}); }
     var c=clone.querySelector('#doc-content'); if(c) c.setAttribute('contenteditable','false');
@@ -1362,6 +1386,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   /* ---------- 배포용 HTML (원본 상태를 바꾸지 않는 별도 사본) ---------- */
   function serializeReadOnly(){
     var clone=withPristine(function(){ return document.documentElement.cloneNode(true); });
+    restoreCloneDisplay(clone);
     var editorStyle=clone.querySelector('#doc-editor-style');
     var editorScript=clone.querySelector('#doc-editor-script');
     if(!editorStyle || !editorScript) throw new Error('편집 엔진의 style/script ID가 없습니다. 크롬과 엔진을 함께 업데이트하세요.');

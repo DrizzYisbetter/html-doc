@@ -76,5 +76,37 @@ const result=await page.evaluate(async()=>{
   }
   return {pass:checks.every(x=>x.pass),count:checks.length,failures:checks.filter(x=>!x.pass)};
 });
-console.log(JSON.stringify(result));if(!result.pass)throw new Error('HTML editor attachment failed');
+// ---- 이슈 #1 회귀: 진짜 키 이벤트로 입력되는지 (textContent 대입은 이 버그를 못 잡는다) ----
+const extra=[];
+const xcheck=(name,pass)=>extra.push({name,pass:!!pass});
+const MINIMAL='<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>t</title></head><body><h1>Hello</h1><p>first</p></body></html>';
+const GRID='<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>g</title><style>#doc-content{display:grid;grid-template-columns:1fr 1fr}</style></head><body><main id="doc-content"><h1>Hello</h1><p>first</p></main></body></html>';
+async function realType(src,id){
+  await page.evaluate(([html,fid])=>{
+    const bundle=JSON.parse(document.getElementById('editor-bundle').textContent);
+    const f=document.createElement('iframe');f.id=fid;f.style.cssText='width:700px;height:420px;border:0';
+    f.srcdoc=window.DocEditorAttach.convert(html,bundle);document.body.appendChild(f);
+  },[src,id]);
+  for(let i=0;i<60;i++){ const ok=await page.evaluate(fid=>{const w=document.getElementById(fid).contentWindow;return !!(w&&w.DocEditor);},id); if(ok)break; await sleep(100); }
+  await page.evaluate(fid=>document.getElementById(fid).contentWindow.DocEditor.edit(true),id);
+  await page.frameLocator('#'+id).locator('#doc-content h1').click();
+  await page.keyboard.press('End');await page.keyboard.press('a');
+  const r=await page.evaluate(fid=>{
+    const w=document.getElementById(fid).contentWindow,d=w.document,root=d.getElementById('doc-content');
+    const styleOf=h=>{const x=new DOMParser().parseFromString(h,'text/html').getElementById('doc-content');return x?(x.getAttribute('style')||''):'(none)';};
+    return {active:d.activeElement.tagName+'#'+(d.activeElement.id||''),text:d.querySelector('#doc-content h1').textContent,
+            editDisplay:w.getComputedStyle(root).display,liveStyle:root.getAttribute('style')||'',
+            savedStyle:styleOf(w.DocEditor.getHTML()),exportStyle:styleOf(w.DocEditor.getReadOnlyHTML())};
+  },id);
+  await page.evaluate(fid=>document.getElementById(fid).remove(),id);
+  return r;
+}
+const t1=await realType(MINIMAL,'qa-type-1');
+xcheck('wrapped root takes focus and accepts real key input',t1.active==='MAIN#doc-content' && t1.text==='Helloa');
+xcheck('editing box exists only while editing',t1.editDisplay==='block' && /block/.test(t1.liveStyle));
+xcheck('saved and exported copies keep display:contents',/contents/.test(t1.savedStyle) && /contents/.test(t1.exportStyle) && !/block/.test(t1.savedStyle+t1.exportStyle));
+const t2=await realType(GRID,'qa-type-2');
+xcheck('existing grid root keeps its layout and still types',t2.editDisplay==='grid' && t2.active==='MAIN#doc-content' && t2.text==='Helloa');
+const all={pass:result.pass&&extra.every(x=>x.pass),count:result.count+extra.length,failures:[...result.failures,...extra.filter(x=>!x.pass)]};
+console.log(JSON.stringify(all));if(!all.pass)throw new Error('HTML editor attachment failed');
 console.log((await snapshot(page)).diff);

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.1
+
+- Fix: documents converted by `tools/add-editor.html` from HTML without an existing `#doc-content` dropped every key press. The `display:contents` wrapper generates no box, so the editing root could not take focus (issue #1).
+- The engine now gives the editing root a box only while editing, and restores `display:contents` for view mode, saved files, and read-only exports. Roots that are intentionally `flex` or `grid` are left untouched.
+- Add real key input regression checks to `tests/attach-editor.js`. Assigning `textContent` cannot catch this class of bug.
+
 ## 1.6.0
 
 - Add anchored notes with replies and resolution, stored in the file (`#doc-notes`) and shown in a side panel.
