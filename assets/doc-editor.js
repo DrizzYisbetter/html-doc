@@ -32,9 +32,8 @@
     var had=blockTarget.getAttribute('class');
     blockTarget.classList.remove('doc-ed-block-target');
     if(!blockTarget.className) blockTarget.removeAttribute('class');
-    var html=content.innerHTML;
-    if(had!==null) blockTarget.setAttribute('class',had);
-    return html;
+    try{ return content.innerHTML; }
+    finally{ if(had!==null) blockTarget.setAttribute('class',had); }
   }
   function sanitizeNotes(arr){
     if(!Array.isArray(arr)) return [];
@@ -387,7 +386,7 @@
              LI:'목록 항목',BLOCKQUOTE:'인용',TR:'표 행',TABLE:'표',UL:'목록',OL:'목록',DL:'목록',
              DT:'용어',DD:'설명',FIGURE:'그림',FIGCAPTION:'그림 설명',PRE:'코드',
              SECTION:'구역',ARTICLE:'구역',HEADER:'머리 구역',FOOTER:'꼬리 구역',ASIDE:'보조 구역'};
-    return map[el.tagName]||'블록';
+    return map[el.tagName]||'';   // 이름이 없으면 호출부에서 그냥 '블록'으로 부른다
   }
   function pickBlock(){
     if(!editing){ toast('편집 모드에서 사용할 수 있습니다.'); return null; }
@@ -395,7 +394,8 @@
     if(!next){ toast(blockTarget?'더 넓힐 상위 블록이 없습니다.':'커서를 삭제할 블록 안에 두세요.'); return null; }
     markTarget(next);
     next.scrollIntoView({block:'nearest'});
-    toast(blockName(next)+' 블록을 지정했습니다. 다시 누르면 상위 블록으로 넓힙니다.');
+    var nm=blockName(next);
+    toast((nm?nm+' ':'')+'블록을 지정했습니다. 다시 누르면 상위 블록으로 넓힙니다.');
     return next;
   }
   function removeBlock(){
@@ -410,7 +410,7 @@
     pendingDelete={node:el,parent:parent,next:next,prev:prev};
     savedRange=null; placeCaretAfterRemoval(parent,next,prev);
     reconcileNotes(); renderNotes(); updateInspector(); scheduleAutosave();
-    toast(label+' 블록을 삭제했습니다.',8000,{label:'되돌리기',fn:undoBlock});
+    toast((label?label+' ':'')+'블록을 삭제했습니다.',8000,{label:'되돌리기',fn:undoBlock});
     return true;
   }
   // 삭제 직후 커서가 엉뚱한 곳에 남지 않게 인접 블록으로 옮긴다.
@@ -782,7 +782,7 @@
       banner.classList.add('show');
       var rb=$('doc-rb-restore'); if(rb) rb.onclick=function(){
         if(comparing) setCompare(false);
-        var cur=content.innerHTML;
+        var cur=getContentHtml();
         if(!(history[0] && history[0].html===cur)){ history.unshift({ts:fileAt||new Date().toISOString(), title:'복구 전: '+snapshotTitle(cur), html:cur, author:fileBy}); history=history.slice(0,30); }
         content.innerHTML=a.html; if(Array.isArray(a.notes)) notes=sanitizeNotes(a.notes);
         savedRange=null; lastBackedUpHtml=a.html; lastBackedUpNotes=JSON.stringify(notes); banner.classList.remove('show'); afterContentReplaced(); updateInspector();
@@ -860,7 +860,7 @@
     revertChange:function(i){ return revertChange(i); },
     changes:function(){ return {counts:cmp?cmp.counts:{ins:0,del:0,mod:0,fmt:0}, total:changeTotal(), index:changeIndex, baseline:baseline?baseline.label:''}; },
     blocks:{
-      pick:function(){ var el=pickBlock(); return el?blockName(el):null; },
+      pick:function(){ var el=pickBlock(); return el?(blockName(el)||'블록'):null; },
       remove:function(){ return removeBlock(); },
       undo:function(){ return undoBlock(); }
     },

@@ -524,11 +524,14 @@ check('block: 토스트의 되돌리기 버튼이 실제로 눌리는 위치에 
   return hit===b || b.contains(hit);   // pointer-events:none 이면 토스트/문서가 잡힌다
 }));
 await setup();
-check('block: 첫 자식 블록도 제자리에 복원된다', await page.evaluate(()=>{
-  window.__put('f-h3'); document.getElementById('doc-ebBlockDel').click();
+check('block: 첫 자식과 마지막 자식 블록 모두 제자리에 복원된다', await page.evaluate(()=>{
+  const order=()=>[...document.querySelector('.card').children].map(x=>x.id).join(',');
+  window.__put('f-h3'); document.getElementById('doc-ebBlockDel').click();   // next 있음
   document.querySelector('#doc-toast button').click();
-  const card=document.querySelector('.card');
-  return [...card.children].map(x=>x.id).join(',')==='f-h3,f-p,f-tag';
+  const first=order()==='f-h3,f-p,f-tag';
+  window.__put('f-tag'); document.getElementById('doc-ebBlockDel').click();  // next 없음(append 경로)
+  document.querySelector('#doc-toast button').click();
+  return first && order()==='f-h3,f-p,f-tag';
 }));
 await setup();
 check('block: 외곽선 표시는 자동저장 백업에 남지 않는다', await page.evaluate(async()=>{
